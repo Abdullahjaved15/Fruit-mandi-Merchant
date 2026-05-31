@@ -125,11 +125,18 @@ export const authAdmin = async (req, res) => {
         const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH?.trim();
         const adminPassword = process.env.ADMIN_PASSWORD?.trim();
 
+        console.log("Login attempt for email:", cleanEmail);
+        console.log("Railway ADMIN_EMAIL is:", adminEmail);
+        console.log("Railway ADMIN_PASSWORD is set?", !!adminPassword);
+        console.log("Railway ADMIN_PASSWORD_HASH is set?", !!adminPasswordHash);
+
         if (adminEmail && (adminPasswordHash || adminPassword)) {
             const emailOk = cleanEmail === adminEmail.toLowerCase();
+            console.log("Email match?", emailOk);
             if (emailOk) {
                 if (adminPasswordHash) {
                     const passwordOk = await bcrypt.compare(cleanPassword, adminPasswordHash);
+                    console.log("Password Hash match?", passwordOk);
                     if (passwordOk) {
                         return res.json({
                             _id: 'admin',
@@ -143,6 +150,7 @@ export const authAdmin = async (req, res) => {
                     const a = Buffer.from(cleanPassword, 'utf8');
                     const b = Buffer.from(adminPassword, 'utf8');
                     const passwordOk = a.length === b.length && crypto.timingSafeEqual(a, b);
+                    console.log("Plaintext Password match?", passwordOk);
                     if (passwordOk) {
                         return res.json({
                             _id: 'admin',
@@ -156,6 +164,7 @@ export const authAdmin = async (req, res) => {
             }
         }
 
+        console.log("Authentication failed. Sending 401.");
         res.status(401).json({ message: 'Invalid email or password' });
     } catch (error) {
         res.status(500).json({ message: 'Server error during admin authentication' });

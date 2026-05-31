@@ -1,7 +1,0 @@
-﻿C:\Users\AL RAHMAN LAPTOP\OneDrive\Desktop\Fruit-Mandi\dist\assets
-C:\Users\AL RAHMAN LAPTOP\OneDrive\Desktop\Fruit-Mandi\dist\favicon.svg
-C:\Users\AL RAHMAN LAPTOP\OneDrive\Desktop\Fruit-Mandi\dist\fruit_bg.png
-C:\Users\AL RAHMAN LAPTOP\OneDrive\Desktop\Fruit-Mandi\dist\icons.svg
-C:\Users\AL RAHMAN LAPTOP\OneDrive\Desktop\Fruit-Mandi\dist\index.html
-C:\Users\AL RAHMAN LAPTOP\OneDrive\Desktop\Fruit-Mandi\dist\assets\index-BGJ1xD_z.css
-C:\Users\AL RAHMAN LAPTOP\OneDrive\Desktop\Fruit-Mandi\dist\assets\index-CKmoWJgl.js

@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { Search, Plus, Filter, Download, MoreVertical, ArrowUpRight, ArrowDownLeft, FileText } from 'lucide-react';
+import { jsPDF } from "jspdf";
+import "jspdf-autotable";
+import * as XLSX from 'xlsx';
 
 const Ledger = () => {
     const [showNewEntry, setShowNewEntry] = useState(false);
@@ -35,12 +38,44 @@ const Ledger = () => {
             .catch((err) => console.error("Ledger fetch fail:", err));
     }, []);
 
-    const handleReport = () => {
-        setIsGenerating(true);
-        setTimeout(() => {
-            setIsGenerating(false);
-            alert('Ledger Report (PDF) has been generated and downloaded!');
-        }, 2000);
+    const handleExportExcel = () => {
+        const data = filteredTransactions.map(t => ({
+            Date: t.date,
+            ID: t.transactionId,
+            Description: t.desc,
+            Party: t.party,
+            Type: t.type,
+            Amount: t.amountRaw
+        }));
+        
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Ledger");
+        XLSX.writeFile(workbook, `Ledger_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+        setOpenMenuId(null);
+    };
+
+    const handleExportPDF = () => {
+        const doc = new jsPDF();
+        doc.text("Javed & Sons - Daily Ledger Report", 14, 15);
+        doc.setFontSize(10);
+        doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 22);
+        
+        const tableColumn = ["Date", "ID", "Description", "Party", "Type", "Amount"];
+        const tableRows = filteredTransactions.map(t => [
+            t.date, t.transactionId, t.desc, t.party, t.type.toUpperCase(), `RS ${t.amountRaw.toLocaleString()}`
+        ]);
+
+        doc.autoTable({
+            head: [tableColumn],
+            body: tableRows,
+            startY: 30,
+            theme: 'striped',
+            headStyles: { fillColor: [22, 163, 74] }
+        });
+        
+        doc.save(`Ledger_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+        setOpenMenuId(null);
     };
 
     const deleteTransaction = (id) => {
@@ -143,7 +178,7 @@ const Ledger = () => {
                             return (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ opacity: 0.6 }}>Receipt ID:</span> <b>{t.id}</b></div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ opacity: 0.6 }}>Date:</span> <b>28 Mar 2026</b></div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ opacity: 0.6 }}>Date:</span> <b>{new Date().toLocaleDateString('en-GB')}</b></div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ opacity: 0.6 }}>Party:</span> <b>{t.party}</b></div>
                                     <div style={{ height: '1px', background: '#eee', margin: '0.5rem 0' }}></div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', marginTop: '1rem' }}><span>TOTAL COST:</span> <b>{t.amount}</b></div>
@@ -172,13 +207,17 @@ const Ledger = () => {
                     </div>
                     <div style={{ display: 'flex', gap: '1rem' }}>
                         <button className="clay-button primary" onClick={() => setShowNewEntry(true)}><Plus /> New Entry</button>
-                        <button className="clay-button" onClick={handleReport} disabled={isGenerating}>
-                            {isGenerating ? (
-                                <><div className="spinner-small" style={{ width: '14px', height: '14px', border: '2px solid #ccc', borderTop: '2px solid var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div> Generating...</>
-                            ) : (
-                                <><Download style={{ width: '18px' }} /> Report</>
+                        <div style={{ position: 'relative' }}>
+                            <button className="clay-button" onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === 'export_ledger' ? null : 'export_ledger'); }}>
+                                <Download style={{ width: '18px' }} /> Report <MoreVertical size={14} />
+                            </button>
+                            {openMenuId === 'export_ledger' && (
+                                <div className="clay-card" style={{ position: 'absolute', right: 0, top: '55px', zIndex: 1000, width: '150px', padding: '0.5rem', background: 'white', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                                    <button className="menu-item" style={{ width: '100%', padding: '0.8rem', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '12px' }} onClick={handleExportExcel}>Excel (.xlsx)</button>
+                                    <button className="menu-item" style={{ width: '100%', padding: '0.8rem', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '12px' }} onClick={handleExportPDF}>PDF (.pdf)</button>
+                                </div>
                             )}
-                        </button>
+                        </div>
                     </div>
                 </header>
 

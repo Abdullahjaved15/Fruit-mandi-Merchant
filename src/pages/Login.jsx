@@ -8,7 +8,8 @@ const Login = ({ onLogin }) => {
     const [formData, setFormData] = useState({
         email: '',
         password: '',
-        name: ''
+        name: '',
+        phone: ''
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -23,13 +24,16 @@ const Login = ({ onLogin }) => {
                 const { data } = await api.post('/auth/register', {
                     username: formData.name,
                     email: formData.email,
-                    password: formData.password
+                    password: formData.password,
+                    phone: formData.phone,
                 });
-                alert('Account successfully created! Logging you in...');
                 onLogin({
                     token: data.token,
                     role: data.role,
                     name: data.username,
+                    email: data.email,
+                    phone: data.phone,
+                    profileImage: data.profileImage,
                     _id: data._id
                 });
             } else {
@@ -41,6 +45,9 @@ const Login = ({ onLogin }) => {
                     token: data.token,
                     role: data.role,
                     name: data.username,
+                    email: data.email,
+                    phone: data.phone,
+                    profileImage: data.profileImage,
                     _id: data._id
                 });
             }
@@ -104,17 +111,30 @@ const Login = ({ onLogin }) => {
                         </div>
                     )}
                     {mode === 'register' && (
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Full Name</label>
-                            <input
-                                type="text"
-                                className="clay-input"
-                                placeholder="e.g. Ali Khan"
-                                value={formData.name}
-                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                required
-                            />
-                        </div>
+                        <>
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Full Name</label>
+                                <input
+                                    type="text"
+                                    className="clay-input"
+                                    placeholder="e.g. Ali Khan"
+                                    value={formData.name}
+                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    required
+                                />
+                            </div>
+                            <div style={{ marginBottom: '1.5rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Phone Number</label>
+                                <input
+                                    type="text"
+                                    className="clay-input"
+                                    placeholder="03xx-xxxxxxx"
+                                    value={formData.phone}
+                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                    required
+                                />
+                            </div>
+                        </>
                     )}
                     
                     <div style={{ marginBottom: '1.5rem' }}>

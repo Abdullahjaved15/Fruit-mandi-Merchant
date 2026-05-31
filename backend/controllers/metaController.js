@@ -8,20 +8,10 @@ import Employee from '../models/Employee.js';
 import Invoice from '../models/Invoice.js';
 import FinanceTransaction from '../models/FinanceTransaction.js';
 import SalesTransaction from '../models/SalesTransaction.js';
-import Attendance from '../models/Attendance.js';
 import BeypariSettlement from '../models/BeypariSettlement.js';
 import Consignment from '../models/Consignment.js';
-import DueAccount from '../models/DueAccount.js';
-import DuePayment from '../models/DuePayment.js';
-import Expense from '../models/Expense.js';
-import FruitType from '../models/FruitType.js';
-import Notification from '../models/Notification.js';
 
 // New models
-import Partner from '../models/Partner.js';
-import PartnerCopybook from '../models/PartnerCopybook.js';
-import Payroll from '../models/Payroll.js';
-import ProductReview from '../models/ProductReview.js';
 import StockMovement from '../models/StockMovement.js';
 import SystemSetting from '../models/SystemSetting.js';
 
@@ -35,18 +25,8 @@ const models = [
   { feature: 'Invoices / Reports', model: Invoice },
   { feature: 'Finance Vouchers', model: FinanceTransaction },
   { feature: 'Ledger / Sales Transactions', model: SalesTransaction },
-  { feature: 'Attendance', model: Attendance },
   { feature: 'Beypari Settlements', model: BeypariSettlement },
   { feature: 'Consignments', model: Consignment },
-  { feature: 'Due Accounts', model: DueAccount },
-  { feature: 'Due Payments', model: DuePayment },
-  { feature: 'Expenses', model: Expense },
-  { feature: 'Fruit Types', model: FruitType },
-  { feature: 'Notifications', model: Notification },
-  { feature: 'Partners', model: Partner },
-  { feature: 'Partner Copybook', model: PartnerCopybook },
-  { feature: 'Payroll Records', model: Payroll },
-  { feature: 'Product Reviews', model: ProductReview },
   { feature: 'Stock Movements', model: StockMovement },
   { feature: 'System Settings', model: SystemSetting },
 ];

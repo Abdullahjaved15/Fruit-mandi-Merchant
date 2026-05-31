@@ -6,6 +6,12 @@ import {
     ChevronDown, ChevronUp, Eye, MapPin, CreditCard, Leaf, Info
 } from 'lucide-react';
 
+const fruitOptions = [
+    'Citrus', 'Apples', 'Mangoes', 'Grapes', 'Bananas', 'Guava', 'Pomegranate',
+    'Watermelon', 'Papaya', 'Pear', 'Dates', 'Plum', 'Kiwi', 'Strawberry',
+    'Pineapple', 'Lychee', 'Cherry', 'Apricot', 'Custard Apple', 'Persimmon'
+];
+
 const getFruitImage = (name, category) => {
     const key = ((name || '') + ' ' + (category || '')).toLowerCase();
     const pick = (query) => `https://source.unsplash.com/featured/800x800/?${encodeURIComponent(query)}`;
@@ -26,11 +32,12 @@ const getFruitImage = (name, category) => {
 /* ─── ADMIN STORE TAB ─────────────────────────────────────────────── */
 const AdminStoreTab = () => {
     const [products, setProducts] = useState([]);
+    const [beyparis, setBeyparis] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showAddModal, setShowAddModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
-    const [newProduct, setNewProduct] = useState({ name: '', sku: '', stock: '', price: '', category: 'Citrus', unit: 'Crates' });
+    const [newProduct, setNewProduct] = useState({ name: '', sku: '', stock: '', price: '', category: 'Citrus', unit: 'Crates', beypariId: '', beypariName: '' });
     const [editData, setEditData] = useState({ name: '', stock: '', price: '', health: '' });
 
 
@@ -54,13 +61,27 @@ const AdminStoreTab = () => {
 
     useEffect(() => {
         fetchInventory();
+        fetchBeyparis();
     }, []);
+
+    const fetchBeyparis = async () => {
+        try {
+            const { data } = await api.get('/data/beyparis');
+            if (Array.isArray(data)) {
+                setBeyparis(data.map(b => ({ id: b._id, name: b.name || 'Unknown', partnerId: b.partnerId || b._id })));
+            }
+        } catch (err) {
+            console.error('Beyparis fetch fail:', err);
+        }
+    };
 
     const handleAdd = async (e, inShop = false) => {
         e.preventDefault();
         const stockValue = parseInt(newProduct.stock) || 0;
+        const autoSku = newProduct.sku?.trim() || `INV-${String(products.length + 1).padStart(3, '0')}`;
         const p = {
             ...newProduct,
+            sku: autoSku,
             img: getFruitImage(newProduct.name, newProduct.category),
             health: '100%',
             stock: stockValue,
@@ -70,7 +91,7 @@ const AdminStoreTab = () => {
         try {
             await api.post('/data/inventory', p);
             setShowAddModal(false);
-            setNewProduct({ name: '', sku: '', stock: '', price: '', category: 'Citrus', unit: 'Crates' });
+            setNewProduct({ name: '', sku: '', stock: '', price: '', category: 'Citrus', unit: 'Crates', beypariId: '', beypariName: '' });
             await fetchInventory();
         } catch (err) {
             console.error('Add fail:', err);
@@ -293,12 +314,23 @@ const AdminStoreTab = () => {
                         <form onSubmit={(e) => handleAdd(e, showAddModal === 'shop')} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
                             <div>
                                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Product Name</label>
-                                <input type="text" className="clay-input" required placeholder="e.g. Red Apple (Kashmir)" value={newProduct.name} onChange={e => setNewProduct({ ...newProduct, name: e.target.value })} />
+                                <input
+                                    type="text"
+                                    list="admin-fruit-options"
+                                    className="clay-input"
+                                    required
+                                    placeholder="Choose or search fruit"
+                                    value={newProduct.name}
+                                    onChange={e => setNewProduct({ ...newProduct, name: e.target.value })}
+                                />
+                                <datalist id="admin-fruit-options">
+                                    {fruitOptions.map((fruit) => <option key={fruit} value={fruit} />)}
+                                </datalist>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                 <div>
                                     <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>SKU</label>
-                                    <input type="text" className="clay-input" required placeholder="FR-001" value={newProduct.sku} onChange={e => setNewProduct({ ...newProduct, sku: e.target.value })} />
+                                    <input type="text" className="clay-input" placeholder="Leave blank to auto-generate" value={newProduct.sku} onChange={e => setNewProduct({ ...newProduct, sku: e.target.value })} />
                                 </div>
                                 <div>
                                     <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Price (₨)</label>
@@ -311,9 +343,29 @@ const AdminStoreTab = () => {
                                 <div>
                                     <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Category</label>
                                     <select className="clay-input" value={newProduct.category} onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}>
-                                        <option>Citrus</option><option>Apples</option><option>Mangoes</option><option>Tropical</option>
+                                        {fruitOptions.map((fruit) => <option key={fruit}>{fruit}</option>)}
                                     </select>
                                 </div>
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Associated Beypari</label>
+                                <select
+                                    className="clay-input"
+                                    value={newProduct.beypariId}
+                                    onChange={e => {
+                                        const selected = beyparis.find(b => b.id === e.target.value);
+                                        setNewProduct({
+                                            ...newProduct,
+                                            beypariId: selected?.id || '',
+                                            beypariName: selected?.name || ''
+                                        });
+                                    }}
+                                >
+                                    <option value="">Select partner</option>
+                                    {beyparis.map(bp => (
+                                        <option key={bp.id} value={bp.id}>{bp.name} ({bp.partnerId})</option>
+                                    ))}
+                                </select>
                             </div>
                             <div>
                                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Unit</label>

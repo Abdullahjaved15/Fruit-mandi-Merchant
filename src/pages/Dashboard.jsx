@@ -16,44 +16,67 @@ import {
     Coins,
     BarChart2,
     Flame,
-    ArrowRight
+    ArrowRight,
+    PieChart as PieIcon,
+    Activity
 } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const Dashboard = () => {
     const navigate = useNavigate();
-    const [showNewSale, setShowNewSale] = React.useState(false);
     const [showDatePicker, setShowDatePicker] = React.useState(false);
     const [activeView, setActiveView] = React.useState('Today');
-    const [chartPeriod, setChartPeriod] = React.useState('Weekly');
-    const [orders, setOrders] = React.useState([]);
+    const [mandiStats, setMandiStats] = React.useState(null);
+    const [inventory, setInventory] = React.useState([]);
+    const [ledger, setLedger] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
 
-    const chartData = {
-        Weekly: [],
-        Monthly: [],
-        Yearly: []
+    const fetchAllData = async () => {
+        setLoading(true);
+        try {
+            const [statsRes, invRes, ledgerRes] = await Promise.all([
+                api.get('/data/mandi-stats'),
+                api.get('/data/inventory'),
+                api.get('/data/ledger'),
+            ]);
+            setMandiStats(statsRes.data);
+            setInventory(invRes.data || []);
+            setLedger(ledgerRes.data || []);
+        } catch (err) {
+            console.error("Dashboard fetch failed", err);
+        } finally {
+            setLoading(false);
+        }
     };
 
     React.useEffect(() => {
-        const fetchOrders = async () => {
-            try {
-                const { data } = await api.get('/data/orders');
-                setOrders(data);
-            } catch (err) {
-                console.error("Fetch orders failed", err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchOrders();
+        fetchAllData();
     }, []);
 
-    const totalStoreSales = orders.reduce((acc, o) => acc + o.totalPrice, 0);
+    const todayShopSales = mandiStats?.todaySalesTotal || 0;
+    const totalInventoryValue = inventory.reduce((acc, i) => acc + ((i.stock || 0) * (i.price || 0)), 0);
+    const totalReceivables = mandiStats?.totalUdhaar || 0;
+    const pendingSettlements = mandiStats?.pendingSettlements || 0;
+    const activeConsignments = mandiStats?.activeConsignments || 0;
+
+    // Process Ledger Data for Area Chart
+    const chartData = ledger.slice(-7).map(t => ({
+        name: t.date?.split(',')[0] || 'Day',
+        income: t.type === 'income' ? t.amountRaw : 0,
+        expense: t.type === 'expense' ? t.amountRaw : 0
+    }));
+
+    // Process Inventory for Pie Chart
+    const pieData = inventory.slice(0, 5).map(item => ({
+        name: item.name,
+        value: item.stock
+    }));
+    const COLORS = ['#16a34a', '#f97316', '#3b82f6', '#7e22ce', '#ef4444'];
 
     return (
         <>
             {/* New Sale Modal */}
-            {showNewSale && (
+            {false && (
                 <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(255,255,255,0.01)', backdropFilter: 'blur(12px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
                     <div className="clay-card" style={{ maxWidth: '480px', width: '100%', padding: '2.5rem', borderRadius: '45px', animation: 'scaleUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)', background: 'white' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
@@ -109,126 +132,165 @@ const Dashboard = () => {
             )}
 
             <div className="page-content">
-            {/* Top Bar */}
-            <div className="dash-topbar">
-                <div className="dash-greeting">
-                    <h1>Good Morning, Admin 👋</h1>
-                    <p>{activeView === 'Today' ? new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : `${activeView}'s Performance`}</p>
+                {/* Top Bar */}
+                <div className="dash-topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+                    <div className="dash-greeting">
+                        <h1 style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Good Morning, Admin 👋</h1>
+                        <p style={{ color: 'var(--text-muted)' }}>{activeView === 'Today' ? new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : `${activeView}'s Performance`}</p>
+                    </div>
+                    <div className="dash-actions" style={{ display: 'flex', gap: '1rem' }}>
+                        <button className="clay-button" onClick={() => setShowDatePicker(true)}><Calendar style={{ width: '18px' }} /> {activeView}</button>
+                        <button className="clay-button primary" onClick={() => navigate('/shop-sales')} style={{ background: 'var(--primary-dark)', padding: '1rem 2rem' }}>
+                            <Plus style={{ width: '18px' }} /> Shop Sale
+                        </button>
+                    </div>
                 </div>
-                <div className="dash-actions">
-                    <button className="clay-button" onClick={() => setShowDatePicker(true)}><Calendar style={{ width: '18px' }} /> {activeView}</button>
-                    <button className="clay-button primary" onClick={() => setShowNewSale(true)} style={{ background: 'var(--primary-dark)', padding: '1rem 2rem' }}>
-                        <Plus style={{ width: '18px' }} /> New Sale
-                    </button>
-                </div>
-            </div>
 
-            {/* Quick Actions */}
-            <div className="quick-actions">
-                <button className="clay-button" onClick={() => navigate('/beyparis')} style={{ background: 'var(--mint)' }}><UserPlus style={{ width: '16px' }} /> Add Beypar</button>
-                <button className="clay-button" onClick={() => navigate('/admin/orders')} style={{ background: 'var(--peach)' }}><ShoppingCart style={{ width: '16px' }} /> Manage Orders</button>
-                <button className="clay-button" onClick={() => navigate('/inventory')} style={{ background: 'var(--sky-blue)' }}><Truck style={{ width: '16px' }} /> New Consignment</button>
-                <button className="clay-button" onClick={() => navigate('/reports')} style={{ background: 'var(--lavender)' }}><FileText style={{ width: '16px' }} /> Generate Report</button>
-            </div>
+                {/* Quick Actions */}
+                <div className="quick-actions" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>
+                    <button className="clay-button" onClick={() => navigate('/shop-sales')} style={{ background: 'var(--mint-bg)', padding: '1.5rem', justifyContent: 'center', gap: '1rem' }}><ShoppingCart style={{ width: '20px' }} /> Shop Sales</button>
+                    <button className="clay-button" onClick={() => navigate('/settlements')} style={{ background: '#fff7ed', padding: '1.5rem', justifyContent: 'center', gap: '1rem' }}><Coins style={{ width: '20px' }} /> Settlements</button>
+                    <button className="clay-button" onClick={() => navigate('/inventory')} style={{ background: '#e0f2fe', padding: '1.5rem', justifyContent: 'center', gap: '1rem' }}><Truck style={{ width: '20px' }} /> Inventory</button>
+                    <button className="clay-button" onClick={() => navigate('/ledger')} style={{ background: '#f5f3ff', padding: '1.5rem', justifyContent: 'center', gap: '1rem' }}><FileText style={{ width: '20px' }} /> Ledger</button>
+                </div>
 
-            {/* Stat Cards */}
-            <div className="stat-cards-row">
-                <div className="stat-card" style={{ background: '#D4F5E2', cursor: 'pointer' }} onClick={() => navigate('/admin/orders')}>
-                    <div className="stat-header">
-                        <div className="stat-icon" style={{ background: '#A3E4B8' }}><TrendingUp style={{ color: '#1a5c2e' }} /></div>
-                        <span className="stat-badge positive">Live</span>
+                {/* Stat Cards */}
+                <div className="stat-cards-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '2rem', marginBottom: '3rem' }}>
+                    <div className="clay-card" style={{ background: '#D4F5E2', cursor: 'pointer' }} onClick={() => navigate('/shop-sales')}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                            <div className="stat-icon" style={{ background: '#A3E4B8', padding: '0.5rem', borderRadius: '12px' }}><TrendingUp style={{ color: '#1a5c2e' }} /></div>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 800, background: 'rgba(255,255,255,0.5)', padding: '2px 8px', borderRadius: '10px' }}>LIVE</span>
+                        </div>
+                        <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Shop Sales Today</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 900 }}>₨ {todayShopSales.toLocaleString()}</div>
                     </div>
-                    <div className="stat-label">Store Sales</div>
-                    <div className="stat-value">PKR {totalStoreSales.toLocaleString()}</div>
-                    <div className="sparkline">
-                        {[40, 70, 45, 90, 65, 80, 50].map((h, i) => (
-                            <div key={i} className="bar" style={{ height: `${h}%`, background: '#6BCB8B' }}></div>
-                        ))}
+                    <div className="clay-card" style={{ background: '#FFE8D6', cursor: 'pointer' }} onClick={() => navigate('/customers')}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                            <div className="stat-icon" style={{ background: '#FFCBA4', padding: '0.5rem', borderRadius: '12px' }}><Wallet style={{ color: '#8B4513' }} /></div>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 800, background: 'rgba(255,255,255,0.5)', padding: '2px 8px', borderRadius: '10px' }}>LIVE</span>
+                        </div>
+                        <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Total Receivables</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 900 }}>₨ {totalReceivables.toLocaleString()}</div>
                     </div>
-                </div>
-                {/* ... other cards ... */}
-                <div className="stat-card" style={{ background: '#FFE8D6', cursor: 'pointer' }} onClick={() => navigate('/udhaar')}>
-                    <div className="stat-header">
-                        <div className="stat-icon" style={{ background: '#FFCBA4' }}><Wallet style={{ color: '#8B4513' }} /></div>
-                        <span className="stat-badge positive">0%</span>
+                    <div className="clay-card" style={{ background: '#D6EDFF', cursor: 'pointer' }} onClick={() => navigate('/inventory')}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                            <div className="stat-icon" style={{ background: '#A8D4F5', padding: '0.5rem', borderRadius: '12px' }}><Box style={{ color: '#0369a1' }} /></div>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 800, background: 'rgba(255,255,255,0.5)', padding: '2px 8px', borderRadius: '10px' }}>LIVE</span>
+                        </div>
+                        <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Inventory Value</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 900 }}>₨ {totalInventoryValue.toLocaleString()}</div>
                     </div>
-                    <div className="stat-label">Total Receivables</div>
-                    <div className="stat-value">PKR 0</div>
-                    <div className="sparkline">
-                        {[0, 0, 0, 0, 0, 0, 0].map((h, i) => (
-                            <div key={i} className="bar" style={{ height: `10%`, background: '#FFB07C' }}></div>
-                        ))}
-                    </div>
-                </div>
-                <div className="stat-card" style={{ background: '#D6EDFF', cursor: 'pointer' }} onClick={() => navigate('/inventory')}>
-                    <div className="stat-header">
-                        <div className="stat-icon" style={{ background: '#A8D4F5' }}><Box style={{ color: '#0369a1' }} /></div>
-                        <span className="stat-badge positive">0%</span>
-                    </div>
-                    <div className="stat-label">Inventory Value</div>
-                    <div className="stat-value">PKR 0</div>
-                    <div className="sparkline">
-                        {[0, 0, 0, 0, 0, 0, 0].map((h, i) => (
-                            <div key={i} className="bar" style={{ height: `10%`, background: '#7CC0E8' }}></div>
-                        ))}
+                    <div className="clay-card" style={{ background: '#EDE0FF', cursor: 'pointer' }} onClick={() => navigate('/settlements')}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                            <div className="stat-icon" style={{ background: '#D4B8FF', padding: '0.5rem', borderRadius: '12px' }}><Coins style={{ color: '#7e22ce' }} /></div>
+                        </div>
+                        <div style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>Pending Settlements</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 900 }}>{pendingSettlements} draft · {activeConsignments} lots</div>
                     </div>
                 </div>
-                <div className="stat-card" style={{ background: '#EDE0FF', cursor: 'pointer' }} onClick={() => navigate('/commission')}>
-                    <div className="stat-header">
-                        <div className="stat-icon" style={{ background: '#D4B8FF' }}><Coins style={{ color: '#7e22ce' }} /></div>
-                        <span className="stat-badge positive">0%</span>
-                    </div>
-                    <div className="stat-label">Commission Earned</div>
-                    <div className="stat-value">PKR 0</div>
-                    <div className="sparkline">
-                        {[0, 0, 0, 0, 0, 0, 0].map((h, i) => (
-                            <div key={i} className="bar" style={{ height: `10%`, background: '#C4A8F0' }}></div>
-                        ))}
-                    </div>
-                </div>
-            </div>
 
-            {/* Chart + Beyparis */}
-            <div className="chart-container">
-                <div className="clay-card cream-bg">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                        <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <BarChart2 style={{ width: '20px' }} /> {chartPeriod} Performance
-                        </h3>
-                        <div className="chart-tabs">
-                            {['Weekly', 'Monthly', 'Yearly'].map(period => (
-                                <button
-                                    key={period}
-                                    className={`chart-tab ${chartPeriod === period ? 'active' : ''}`}
-                                    onClick={() => setChartPeriod(period)}
-                                >{period}</button>
-                            ))}
+                {/* Analytics Section */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 1fr)', gap: '2rem', marginBottom: '3rem' }}>
+                    <div className="clay-card">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}><Activity size={22} color="var(--primary)" /> Financial Pulse</h3>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Last 7 Transactions</div>
+                        </div>
+                        <div style={{ width: '100%', height: '350px' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={chartData}>
+                                    <defs>
+                                        <linearGradient id="colorInc" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#16a34a" stopOpacity={0.1}/>
+                                            <stop offset="95%" stopColor="#16a34a" stopOpacity={0}/>
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
+                                    <Tooltip 
+                                        contentStyle={{ borderRadius: '15px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}
+                                    />
+                                    <Area type="monotone" dataKey="income" stroke="#16a34a" fillOpacity={1} fill="url(#colorInc)" strokeWidth={3} />
+                                    <Area type="monotone" dataKey="expense" stroke="#ef4444" fillOpacity={0} strokeWidth={2} strokeDasharray="5 5" />
+                                </AreaChart>
+                            </ResponsiveContainer>
                         </div>
                     </div>
-                    <div className="clay-bar-chart">
-                        <div className="chart-avg-line" style={{ bottom: '60%' }}><span>Avg ₨ {chartPeriod === 'Weekly' ? '38k' : chartPeriod === 'Monthly' ? '2.1L' : '9L'}</span></div>
-                        {chartData[chartPeriod].map((d, i) => (
-                            <div key={i} className="clay-bar" style={{ height: `${d.value}%`, flex: chartPeriod === 'Yearly' ? '0 0 7%' : undefined }} onClick={() => alert(`Sales for ${d.label}: ₨ ${d.raw}`)}>
-                                <span className="bar-label" style={{ fontSize: chartPeriod === 'Yearly' ? '0.6rem' : undefined }}>{d.label}</span>
-                                <span className="bar-tooltip">₨ {d.raw}</span>
-                            </div>
-                        ))}
+
+                    <div className="clay-card">
+                        <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '2rem' }}><PieIcon size={22} color="var(--accent)" /> Stock Allocation</h3>
+                        <div style={{ width: '100%', height: '300px' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie
+                                        data={pieData}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={60}
+                                        outerRadius={80}
+                                        paddingAngle={5}
+                                        dataKey="value"
+                                    >
+                                        {pieData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div style={{ marginTop: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'center' }}>
+                            {pieData.map((item, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem' }}>
+                                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: COLORS[i % COLORS.length] }}></div>
+                                    {item.name}
+                                </div>
+                            ))}
+                            {pieData.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No inventory data</span>}
+                        </div>
                     </div>
                 </div>
-                <div className="clay-card">
-                    <h3 style={{ marginBottom: '1.5rem' }}>Recent Activity</h3>
-                    <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No recent activity to show.</div>
-                    <button className="clay-button" onClick={() => navigate('/beyparis')} style={{ width: '100%', marginTop: '1.25rem', justifyContent: 'center', fontSize: '0.85rem' }}>View All Beyparis</button>
-                </div>
-            </div>
 
-            {/* Top Selling Fruits */}
-            <div className="clay-card">
-                <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Flame style={{ width: '20px', color: 'var(--accent)' }} /> Top Selling Fruits Today
-                </h3>
-                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No sales data for today.</div>
-            </div>
+                {/* Bottom Feed */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+                    <div className="clay-card">
+                        <h3 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Flame style={{ width: '20px', color: 'var(--accent)' }} /> Top Selling Fruits
+                        </h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            {inventory.length > 0 ? (
+                                inventory.slice(0, 3).map((item, i) => (
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem', background: 'var(--warm-bg)', borderRadius: '15px' }}>
+                                        <span style={{ fontWeight: 600 }}>{item.name}</span>
+                                        <span style={{ color: 'var(--success)', fontWeight: 800 }}>{item.stock} in stock</span>
+                                    </div>
+                                ))
+                            ) : (
+                                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No inventory data available.</div>
+                            )}
+                        </div>
+                    </div>
+                    
+                    <div className="clay-card">
+                        <h3 style={{ marginBottom: '1.5rem' }}>Recent Ledger Activity</h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            {ledger.length > 0 ? (
+                                ledger.slice(-3).reverse().map((t, i) => (
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', padding: '0.5rem 0', borderBottom: '1px solid #f1f5f9' }}>
+                                        <span style={{ fontWeight: 500 }}>{t.party}</span>
+                                        <span style={{ color: t.type === 'income' ? 'var(--success)' : 'var(--danger)', fontWeight: 700 }}>
+                                            {t.type === 'income' ? '+' : '-'} ₨ {t.amountRaw.toLocaleString()}
+                                        </span>
+                                    </div>
+                                ))
+                            ) : (
+                                <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No transactions yet.</div>
+                            )}
+                        </div>
+                        <button className="clay-button" onClick={() => navigate('/ledger')} style={{ width: '100%', marginTop: '1.5rem', justifyContent: 'center', fontSize: '0.85rem' }}>View All Transactions</button>
+                    </div>
+                </div>
             </div>
         </>
     );

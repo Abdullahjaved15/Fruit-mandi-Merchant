@@ -1,20 +1,36 @@
 import mongoose from 'mongoose';
 
+const paymentSchema = mongoose.Schema(
+    {
+        amount: { type: Number, required: true, min: 0 },
+        date: { type: Date, default: Date.now },
+        copybookStaff: { type: String, default: '' },
+        method: { type: String, default: 'cash' },
+        note: { type: String, default: '' },
+    },
+    { _id: true }
+);
+
 const customerSchema = mongoose.Schema(
     {
-        customerId: { type: String, required: true }, // e.g., "CUST-001"
+        customerId: { type: String, required: true },
         name: { type: String, required: true },
         contact: { type: String },
+        product: { type: String, default: '' },
+        beypariProduct: { type: String, default: '' },
         purchaseRaw: { type: Number, default: 0 },
-        purchase: { type: String }, // e.g., "PKR 1,250,000"
+        purchase: { type: String },
         udhaarRaw: { type: Number, default: 0 },
-        udhaar: { type: String }, // e.g., "PKR 450,000"
+        udhaar: { type: String },
         udhaarPercent: { type: Number, default: 0 },
-        udhaarType: { type: String, default: 'success' }, // e.g., danger, accent, success based on React UI
+        udhaarType: { type: String, default: 'success' },
+        assignedCopybook: { type: String, default: '' },
+        payments: [paymentSchema],
+        lastPaymentAt: { type: Date },
     },
     {
         timestamps: true,
-        collection: 'Customers', // MUST exact match Compass collection name
+        collection: 'Customers',
     }
 );
 

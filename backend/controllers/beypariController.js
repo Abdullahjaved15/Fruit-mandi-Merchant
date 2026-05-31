@@ -15,8 +15,28 @@ export const getBeyparis = async (req, res) => {
 // @route   POST /api/beyparis
 export const createBeypari = async (req, res) => {
     try {
-        const beypari = await Beypari.create(req.body);
+        let payload = { ...req.body };
+        if (!payload.partnerId || String(payload.partnerId).trim() === '') {
+            const count = await Beypari.countDocuments();
+            payload.partnerId = `B-${1020 + count + 1}`;
+        }
+        const beypari = await Beypari.create(payload);
         res.status(201).json(beypari);
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};
+
+// @desc    Update an existing beypari
+// @route   PUT /api/beyparis/:id
+export const updateBeypari = async (req, res) => {
+    try {
+        const beypari = await Beypari.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        if (beypari) {
+            res.json(beypari);
+        } else {
+            res.status(404).json({ message: 'Beypari not found' });
+        }
     } catch (error) {
         res.status(400).json({ message: error.message });
     }

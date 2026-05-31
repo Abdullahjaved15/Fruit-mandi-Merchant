@@ -42,7 +42,7 @@ const HR = () => {
 
     const [newStaff, setNewStaff] = useState({ name: '', role: 'Warehouse Manager', salary: '', phone: '' });
 
-    const handleHire = (e) => {
+    const handleHire = async (e) => {
         e.preventDefault();
         const staff = {
             ...newStaff,
@@ -51,20 +51,29 @@ const HR = () => {
             status: "Present",
             email: `${(newStaff.name || '').toLowerCase().replace(' ', '.')}@kissan.com`
         };
-        // Update UI instantly
-        setEmployees([staff, ...employees]);
-        setShowHireModal(false);
-        setNewStaff({ name: '', role: 'Warehouse Manager', salary: '', phone: '' });
-        // Save to DB silently
-        api.post('/data/employees', staff).catch((err) => console.error("HR save fail:", err));
+        try {
+            const { data } = await api.post('/data/employees', staff);
+            setEmployees([{...data, id: data._id}, ...employees]);
+            setShowHireModal(false);
+            setNewStaff({ name: '', role: 'Warehouse Manager', salary: '', phone: '' });
+        } catch (err) {
+            console.error("HR save fail:", err);
+            alert("Failed to save employee data. Please try again.");
+        }
     };
 
-    const deleteStaff = (id) => {
+    const deleteStaff = async (id) => {
         if(window.confirm("Are you sure you want to terminate this employee?")) {
+            const prev = [...employees];
             setEmployees(employees.filter(emp => emp.id !== id));
             setMoreMenuId(null);
-            // Save to DB silently
-            api.delete(`/data/employees/${id}`).catch((err) => console.error("HR delete fail:", err));
+            try {
+                await api.delete(`/data/employees/${id}`);
+            } catch (err) {
+                console.error("HR delete fail:", err);
+                setEmployees(prev);
+                alert("Failed to delete employee data. Please try again.");
+            }
         }
     };
 

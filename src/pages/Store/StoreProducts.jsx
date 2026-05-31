@@ -140,7 +140,7 @@ const StoreProducts = ({ cartItems, addToCart, favorites, toggleFavorite }) => {
                     <div className="clay-card modal-scale-up" style={{ maxWidth: '1050px', width: '100%', padding: 0, borderRadius: '60px', background: 'white', overflow: 'hidden', display: 'flex', boxShadow: '0 50px 100px rgba(0,0,0,0.12)', border: 'none', maxHeight: '85vh', animation: 'scaleUp 0.3s ease-out' }}>
                         <div style={{ flex: '1.2', position: 'relative' }}>
                             <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg,#f0fff4,#fff5e4)' }}>
-                                <FruitIcon name={showProduct.name} category={showProduct.category} size={220} variant="modal" />
+                                <img src={showProduct.img} alt={showProduct.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '24px' }} />
                             </div>
                             <button className="clay-button" style={{ position: 'absolute', top: '1.5rem', left: '1.5rem', width: '56px', height: '56px', padding: 0, background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', boxShadow: clayShadowPuffy, border: 'none', cursor: 'pointer' }} onClick={() => setShowProduct(null)}>
                                 <X size={28} strokeWidth={2.5} color="#2D3436" />
@@ -154,6 +154,9 @@ const StoreProducts = ({ cartItems, addToCart, favorites, toggleFavorite }) => {
                             <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.8rem', marginBottom: '2.5rem' }}>
                                 <div style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--primary-dark)' }}>₨ {showProduct.price}</div>
                                 <span style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>/ crate batch</span>
+                                <span style={{ marginLeft: 'auto', background: showProduct.stock > 0 ? '#E8F5E9' : '#FFEBEE', color: showProduct.stock > 0 ? '#2E7D32' : '#C62828', padding: '0.4rem 0.8rem', borderRadius: '12px', fontWeight: 700 }}>
+                                    {showProduct.stock > 0 ? `${showProduct.stock} Available` : 'Out of Stock'}
+                                </span>
                             </div>
                             <div style={{ display: 'flex', gap: '2.5rem', marginBottom: '3rem' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}><MapPin size={24} color="var(--primary)" /> <b style={{ fontSize: '1.15rem' }}>{showProduct.origin}</b></div>
@@ -199,11 +202,11 @@ const StoreProducts = ({ cartItems, addToCart, favorites, toggleFavorite }) => {
                                     <Star size={18} color={isFavorite(p.id) ? "#f57c00" : "#2D3436"} fill={isFavorite(p.id) ? "#f57c00" : "none"} />
                                 </button>
                                 {p.badge && <span className={`stock-badge ${p.badgeClass}`}>{p.badge}</span>}
-                                <FruitIcon name={p.name} category={p.category} size="fill" />
+                                <img src={p.img} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
                             </div>
                             <div className="product-info" style={{ marginTop: '1.5rem' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                                    <div><h4 style={{ margin: 0, fontSize: '1.4rem' }}>{p.name}</h4><div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Mandi Rate Grade</div></div>
+                                    <div><h4 style={{ margin: 0, fontSize: '1.4rem' }}>{p.name}</h4><div style={{ fontSize: '0.85rem', color: p.stock > 0 ? 'var(--success)' : 'var(--danger)', marginTop: '0.2rem', fontWeight: 600 }}>{p.stock > 0 ? `${p.stock} crates available` : 'Out of Stock'}</div></div>
                                     <div style={{ fontWeight: 800, fontSize: '1.4rem', color: 'var(--primary-dark)' }}>₨ {p.price}</div>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.6rem' }}>

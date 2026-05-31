@@ -370,7 +370,7 @@ body {
 
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
@@ -1267,4 +1267,59 @@ body {
   gap: 1.2rem;
   padding: 1.25rem 0;
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-}@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } @keyframes scaleUp { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+}
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } 
+@keyframes scaleUp { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* ===================== PRINT STYLES ===================== */
+@media print {
+  /* Reset all parent containers so absolute positioning works perfectly from the page edge */
+  body, html, #root, .app-container, .main-viewport, .page-content, .clay-card, .print-modal-wrapper {
+    position: static !important;
+    transform: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+    height: auto !important;
+    width: auto !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+  
+  #printable-invoice, #printable-invoice * {
+    visibility: visible;
+  }
+  
+  #printable-invoice {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 20px 40px !important;
+    background: white;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    min-height: 0 !important;
+    height: auto !important;
+    display: block !important;
+  }
+  
+  /* Hide UI elements that shouldn't be printed */
+  .clay-button, 
+  .sidebar, 
+  header, 
+  .mobile-nav-toggle,
+  .no-print {
+    display: none !important;
+  }
+  
+  @page {
+    margin: 0.5cm;
+  }
+}

@@ -36,7 +36,7 @@ const Finance = () => {
 
     const [newExpense, setNewExpense] = useState({ category: 'Fuel', desc: '', amount: '', method: 'Cash' });
 
-    const handleAddExpense = (e) => {
+    const handleAddExpense = async (e) => {
         e.preventDefault();
         const voucher = {
             voucherId: `#VOU-${1022 + vouchers.length}`,
@@ -45,23 +45,29 @@ const Finance = () => {
             amount: newExpense.amount,
             date: new Date().toISOString().split('T')[0]
         };
-        // Update UI instantly
-        setVouchers([voucher, ...vouchers]);
-        setShowExpenseModal(false);
-        setNewExpense({ category: 'Fuel', desc: '', amount: '', method: 'Cash' });
-        // Save to DB silently
-        api.post('/data/finance', voucher).catch((err) => console.error("Finance save fail:", err));
+        try {
+            const { data } = await api.post('/data/finance', voucher);
+            setVouchers([{...data, id: data._id, voucherId: data.voucherId || data._id}, ...vouchers]);
+            setShowExpenseModal(false);
+            setNewExpense({ category: 'Fuel', desc: '', amount: '', method: 'Cash' });
+        } catch (err) {
+            console.error("Finance save fail:", err);
+            alert("Failed to record expense. Please try again.");
+        }
     };
 
-    const handleDeleteVoucher = (id) => {
+    const handleDeleteVoucher = async (id) => {
         if (window.confirm("Are you sure you want to remove this voucher record?")) {
-            setVouchers(prev => prev.filter(v => v.id !== id));
-            api.delete(`/data/finance/${id}`)
-                .then(() => console.log("Voucher deleted from DB"))
-                .catch((err) => {
-                    console.error("Finance delete fail:", err);
-                    alert("Sync failed: Could not delete voucher from server.");
-                });
+            const prev = [...vouchers];
+            setVouchers(vouchers.filter(v => v.id !== id));
+            try {
+                await api.delete(`/data/finance/${id}`);
+                console.log("Voucher deleted from DB");
+            } catch (err) {
+                console.error("Finance delete fail:", err);
+                setVouchers(prev);
+                alert("Sync failed: Could not delete voucher from server.");
+            }
         }
     };
 

@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { useSelector, useDispatch } from 'react-redux';
+import { logout as logoutAction, loginSuccess } from './redux/authSlice';
+import { 
+    addToCart as addToCartAction, 
+    removeFromCart as removeFromCartAction, 
+    updateQuantity as updateQuantityAction, 
+    clearCart as clearCartAction 
+} from './redux/cartSlice';
 import { Menu, LogOut, LayoutDashboard, ShoppingBag, Package, Settings, User, Leaf } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import Landing from './pages/Landing';
@@ -22,6 +30,8 @@ import StoreCart from './pages/Store/StoreCart';
 import AdminLogin from './pages/AdminLogin';
 import StoreOrders from './pages/Store/StoreOrders';
 import AdminOrders from './pages/AdminOrders';
+import ShopSales from './pages/ShopSales';
+import Settlements from './pages/Settlements';
 
 const UnderConstruction = ({ title }) => (
   <div className="page-content" style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '1rem' }}>
@@ -37,7 +47,10 @@ const UnderConstruction = ({ title }) => (
 );
 
 const App = () => {
-  const [authData, setAuthData] = useState(() => JSON.parse(localStorage.getItem('auth_data')));
+  const dispatch = useDispatch();
+  const authData = useSelector((state) => state.auth.user);
+  const cartItems = useSelector((state) => state.cart.items);
+  
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -51,14 +64,12 @@ const App = () => {
   const toggleSidebar = () => setSidebarCollapsed(prev => !prev);
 
   const logout = () => {
-    localStorage.removeItem('auth_data');
-    setAuthData(null);
+    dispatch(logoutAction());
     navigate('/');
   };
 
   const handleLogin = (data) => {
-    localStorage.setItem('auth_data', JSON.stringify(data));
-    setAuthData(data);
+    dispatch(loginSuccess(data));
     if (data.role === 'admin') {
       navigate('/dashboard');
     } else {
@@ -73,38 +84,24 @@ const App = () => {
     }
   }, [location.pathname]);
 
-  const [cartItems, setCartItems] = useState([]);
   const [favorites, setFavorites] = useState([]);
 
-  const addToCart = (product, clearFirst = false) => {
-    if (clearFirst) {
-      setCartItems([{ ...product, quantity: 1 }]);
-      return;
-    }
-    setCartItems(prev => {
-      const existing = prev.find(item => item.name === product.name);
-      if (existing) {
-        return prev.map(item => item.name === product.name ? { ...item, quantity: item.quantity + 1 } : item);
+  const addToCart = (product) => {
+    dispatch(addToCartAction(product));
+  };
+
+  const removeFromCart = (id) => {
+    dispatch(removeFromCartAction(id));
+  };
+
+  const updateQuantity = (id, amount) => {
+      const item = cartItems.find(i => i.id === id);
+      if (item) {
+          dispatch(updateQuantityAction({ id, quantity: item.quantity + amount }));
       }
-      return [...prev, { ...product, quantity: 1 }];
-    });
   };
 
-  const removeFromCart = (name) => {
-    setCartItems(prev => prev.filter(item => item.name !== name));
-  };
-
-  const updateQuantity = (name, amount) => {
-    setCartItems(prev => prev.map(item => {
-      if (item.name === name) {
-        const newQty = Math.max(1, item.quantity + amount);
-        return { ...item, quantity: newQty };
-      }
-      return item;
-    }));
-  };
-
-  const clearCart = () => setCartItems([]);
+  const clearCart = () => dispatch(clearCartAction());
 
   const toggleFavorite = (product) => {
     setFavorites(prev => {
@@ -155,6 +152,14 @@ const App = () => {
           <Route
             path="/beyparis"
             element={authData?.role === 'admin' ? <Beyparis /> : <Navigate to="/__portal" />}
+          />
+          <Route
+            path="/shop-sales"
+            element={authData?.role === 'admin' ? <ShopSales /> : <Navigate to="/__portal" />}
+          />
+          <Route
+            path="/settlements"
+            element={authData?.role === 'admin' ? <Settlements /> : <Navigate to="/__portal" />}
           />
           <Route
             path="/ledger"

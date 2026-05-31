@@ -12,6 +12,8 @@ const inventorySchema = mongoose.Schema(
         health: { type: String, default: '100%' }, // e.g., "85%"
         img: { type: String }, // e.g., "https://..."
         status: { type: String, default: 'In Stock' }, // In Stock, Low Stock, Out of Stock
+        beypariId: { type: String, default: '' },
+        beypariName: { type: String, default: '' },
     },
     {
         timestamps: true,

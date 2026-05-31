@@ -6,27 +6,35 @@ import { Search, UserPlus, Filter, Download, MoreVertical, CheckCircle, Clock, A
 const Beyparis = () => {
     const navigate = useNavigate();
     const [consignors, setConsignors] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    // Silently load from DB in background - demo data shows instantly
+    const fetchBeyparis = async () => {
+        setLoading(true);
+        try {
+            const { data } = await api.get('/data/beyparis');
+            if (data && Array.isArray(data)) {
+                setConsignors(data.map(b => ({ 
+                    ...b, 
+                    id: b._id,
+                    partnerId: b.partnerId || b._id,
+                    balance: b.balance || '0.00',
+                    status: b.status || 'Active',
+                    area: b.area || 'Unknown',
+                    phone: b.phone || '-',
+                    joinDate: b.joinDate || 'N/A',
+                    totalShipments: b.totalShipments || 0,
+                    rating: b.rating || 0
+                }))); 
+            }
+        } catch (err) {
+            console.error("Beyparis fetch fail:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        api.get('/data/beyparis')
-            .then(({ data }) => { 
-                if (data && data.length > 0) {
-                    setConsignors(data.map(b => ({ 
-                        ...b, 
-                        id: b._id, // Use _id as the primary identifier for API calls
-                        partnerId: b.partnerId || b._id, // Keep partnerId for display
-                        balance: b.balance || '0.00',
-                        status: b.status || 'Active',
-                        area: b.area || 'Unknown',
-                        phone: b.phone || '-',
-                        joinDate: b.joinDate || 'N/A',
-                        totalShipments: b.totalShipments || 0,
-                        rating: b.rating || 0
-                    }))); 
-                }
-            })
-            .catch((err) => console.error("Beyparis fetch fail:", err)); // silent fail - keep demo data
+        fetchBeyparis();
     }, []);
 
     const [showAddModal, setShowAddModal] = useState(false);
@@ -36,54 +44,92 @@ const Beyparis = () => {
     const [openMenuId, setOpenMenuId] = useState(null);
     const [newBeypari, setNewBeypari] = useState({
         name: '',
+        phone: '',
         area: '',
         balance: '0.00',
         status: 'Active'
     });
+    const [showConsignmentModal, setShowConsignmentModal] = useState(false);
+    const [consignmentBeypari, setConsignmentBeypari] = useState(null);
+    const [consignmentForm, setConsignmentForm] = useState({
+        productName: '',
+        unit: 'crate',
+        quantityReceived: '',
+        minimumTargetAmount: '',
+        fuelCost: '',
+        notes: '',
+    });
+    const [apiError, setApiError] = useState('');
 
-    const handleAddBeypari = (e) => {
+    const handleAddBeypari = async (e) => {
         e.preventDefault();
-        const id = `B-${1020 + consignors.length + 1}`;
-        const beypariToAdd = {
+        setApiError('');
+        const payload = {
             name: newBeypari.name,
-            id: id,
-            partnerId: id,
-            area: newBeypari.area || 'Unknown',
-            rating: 5.0,
+            phone: newBeypari.phone,
+            area: newBeypari.area || 'Punjab',
             status: newBeypari.status || 'Active',
             balance: newBeypari.balance || '0.00',
-            phone: "+92 300 0000000",
             joinDate: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
-            totalShipments: 0
+            totalShipments: 0,
         };
-        // Update UI immediately (optimistic update)
-        setConsignors(prev => [...prev, beypariToAdd]);
-        setShowAddModal(false);
-        setNewBeypari({ name: '', area: '', balance: '0.00', status: 'Active' });
-        // Save to DB silently in background
-        api.post('/data/beyparis', beypariToAdd).catch((err) => console.error("Beyparis post fail:", err));
+        try {
+            const { data } = await api.post('/data/beyparis', payload);
+            setConsignors((prev) => [...prev, { ...data, id: data._id }]);
+            setShowAddModal(false);
+            setNewBeypari({ name: '', phone: '', area: '', balance: '0.00', status: 'Active' });
+        } catch (err) {
+            setApiError(err.response?.data?.message || 'Failed to add beyopari');
+        }
     };
 
-    const handleDeleteBeypari = (id) => {
-        if (window.confirm('Are you sure you want to remove this Beypari? This action cannot be undone.')) {
-            // Update UI immediately (optimistic)
-            setConsignors(prev => prev.filter(c => c.id !== id));
-            setOpenMenuId(null);
-            // Delete from DB
-            api.delete(`/data/beyparis/${id}`)
-                .then(() => console.log("Beypari deleted from DB"))
-                .catch((err) => {
-                    console.error("Beyparis delete fail:", err);
-                    alert("Failed to delete from database. Please check your connection.");
-                });
+    const handleDeleteBeypari = async (id) => {
+        if (!window.confirm('Are you sure you want to remove this Beypari? This action cannot be undone.')) return;
+        const prev = consignors;
+        setConsignors((p) => p.filter((c) => c.id !== id));
+        setOpenMenuId(null);
+        try {
+            await api.delete(`/data/beyparis/${id}`);
+        } catch {
+            setConsignors(prev);
+            alert('Failed to delete from database. Please check your connection.');
+        }
+    };
+
+    const handleCreateConsignment = async (e) => {
+        e.preventDefault();
+        if (!consignmentBeypari) return;
+        setApiError('');
+        try {
+            await api.post('/data/consignments', {
+                beypari: consignmentBeypari.id,
+                productName: consignmentForm.productName,
+                unit: consignmentForm.unit,
+                quantityReceived: parseFloat(consignmentForm.quantityReceived),
+                minimumTargetAmount: parseFloat(consignmentForm.minimumTargetAmount),
+                fuelCost: parseFloat(consignmentForm.fuelCost) || 0,
+                notes: consignmentForm.notes,
+            });
+            setShowConsignmentModal(false);
+            setConsignmentForm({
+                productName: '',
+                unit: 'crate',
+                quantityReceived: '',
+                minimumTargetAmount: '',
+                fuelCost: '',
+                notes: '',
+            });
+            alert('Consignment created. Record shop sales from Shop Sales page.');
+        } catch (err) {
+            setApiError(err.response?.data?.message || 'Failed to create consignment');
         }
     };
 
     const handleExport = () => {
-        const headers = ["Name", "ID", "Region", "Balance", "Rating", "Status"];
+        const headers = ["Name", "ID", "Balance", "Rating", "Status"];
         const csvContent = [
             headers.join(","),
-            ...consignors.map(c => `${c.name || ''},${c.id || ''},${c.area || ''},${c.balance || ''},${c.rating || 0},${c.status || ''}`)
+            ...consignors.map(c => `${c.name || ''},${c.id || ''},${c.balance || ''},${c.rating || 0},${c.status || ''}`)
         ].join("\n");
 
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -106,9 +152,8 @@ const Beyparis = () => {
     const filteredBeyparis = consignors.filter(c => {
         const name = (c.name || '').toLowerCase();
         const id = (c.id || c.partnerId || '').toLowerCase();
-        const area = (c.area || '').toLowerCase();
         const term = searchTerm.toLowerCase();
-        const matchesSearch = name.includes(term) || id.includes(term) || area.includes(term);
+        const matchesSearch = name.includes(term) || id.includes(term);
         const matchesFilter = activeFilter === 'All' || (c.status || '').toLowerCase() === activeFilter.toLowerCase();
         return matchesSearch && matchesFilter;
     });
@@ -144,7 +189,7 @@ const Beyparis = () => {
                                 </div>
                                 <div>
                                     <h2 style={{ fontSize: '1.8rem', margin: 0 }}>{selectedBeypari.name || 'Beypari Profile'}</h2>
-                                    <span className="clay-chip" style={{ background: 'var(--warm-bg)' }}>Partner ID: {selectedBeypari.id}</span>
+                                    <span className="clay-chip" style={{ background: 'var(--warm-bg)' }}>Partner ID: {selectedBeypari.partnerId || selectedBeypari.id}</span>
                                 </div>
                             </div>
                             <button className="clay-button" style={{ width: '40px', height: '40px', padding: 0 }} onClick={() => setSelectedBeypari(null)}><X /></button>
@@ -157,7 +202,7 @@ const Beyparis = () => {
                             </div>
                             <div className="clay-card" style={{ padding: '1.25rem', boxShadow: 'var(--clay-shadow-in)', borderRadius: '24px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.4rem', fontSize: '0.85rem' }}><MapPin size={14} /> Location</div>
-                                <div style={{ fontWeight: 700 }}>{selectedBeypari.area || 'Unknown'}</div>
+                                <div style={{ fontWeight: 700 }}>Punjab</div>
                             </div>
                             <div className="clay-card" style={{ padding: '1.25rem', boxShadow: 'var(--clay-shadow-in)', borderRadius: '24px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.4rem', fontSize: '0.85rem' }}><Star size={14} /> Trust Rating</div>
@@ -185,8 +230,8 @@ const Beyparis = () => {
                         </div>
 
                         <div style={{ display: 'flex', gap: '1rem' }}>
-                            <button className="clay-button primary" style={{ flex: 1, padding: '1.1rem', borderRadius: '18px' }} onClick={() => navigate('/ledger')}>View Full Ledger</button>
-                            <button className="clay-button" style={{ flex: 1, padding: '1.1rem', borderRadius: '18px' }} onClick={() => { alert('Partner support line: ' + (selectedBeypari.phone || 'No phone data')); }}>Contact Partner</button>
+                            <button type="button" className="clay-button primary" style={{ flex: 1, padding: '1.1rem', borderRadius: '18px' }} onClick={() => { setConsignmentBeypari(selectedBeypari); setShowConsignmentModal(true); setSelectedBeypari(null); }}>New Consignment</button>
+                            <button type="button" className="clay-button" style={{ flex: 1, padding: '1.1rem', borderRadius: '18px' }} onClick={() => navigate('/settlements')}>Settlements</button>
                         </div>
                     </div>
                 </div>
@@ -215,21 +260,17 @@ const Beyparis = () => {
                                     value={newBeypari.name} onChange={(e) => setNewBeypari({...newBeypari, name: e.target.value})}
                                 />
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.6rem', fontWeight: 600, color: 'var(--text-muted)' }}>Region/Area</label>
-                                    <input 
-                                        type="text" required className="clay-input" placeholder="e.g. Sindh" 
-                                        value={newBeypari.area} onChange={(e) => setNewBeypari({...newBeypari, area: e.target.value})}
-                                    />
-                                </div>
-                                <div>
-                                    <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.6rem', fontWeight: 600, color: 'var(--text-muted)' }}>Initial Balance</label>
-                                    <input 
-                                        type="text" className="clay-input" placeholder="e.g. 0.00" 
-                                        value={newBeypari.balance} onChange={(e) => setNewBeypari({...newBeypari, balance: e.target.value})}
-                                    />
-                                </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.6rem', fontWeight: 600, color: 'var(--text-muted)' }}>Phone</label>
+                                <input type="text" className="clay-input" placeholder="+92..." value={newBeypari.phone} onChange={(e) => setNewBeypari({...newBeypari, phone: e.target.value})} />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.6rem', fontWeight: 600, color: 'var(--text-muted)' }}>Area</label>
+                                <input type="text" className="clay-input" placeholder="Punjab" value={newBeypari.area} onChange={(e) => setNewBeypari({...newBeypari, area: e.target.value})} />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.6rem', fontWeight: 600, color: 'var(--text-muted)' }}>Initial Balance</label>
+                                <input type="text" className="clay-input" placeholder="e.g. 0.00" value={newBeypari.balance} onChange={(e) => setNewBeypari({...newBeypari, balance: e.target.value})} />
                             </div>
                             <div>
                                 <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.6rem', fontWeight: 600, color: 'var(--text-muted)' }}>Status</label>
@@ -244,6 +285,29 @@ const Beyparis = () => {
                                 </select>
                             </div>
                             <button type="submit" className="clay-button primary" style={{ width: '100%', marginTop: '1rem', height: '60px', borderRadius: '22px', fontSize: '1.1rem' }}>Complete Registration</button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {showConsignmentModal && consignmentBeypari && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.15)', backdropFilter: 'blur(8px)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }} onClick={() => setShowConsignmentModal(false)}>
+                    <div className="clay-card" style={{ maxWidth: '500px', width: '100%', padding: '2rem' }} onClick={(e) => e.stopPropagation()}>
+                        <h2 style={{ marginTop: 0 }}>New Consignment — {consignmentBeypari.name}</h2>
+                        {apiError && <p style={{ color: 'var(--danger)' }}>{apiError}</p>}
+                        <form onSubmit={handleCreateConsignment} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <input className="clay-input" placeholder="Product (e.g. Apples)" required value={consignmentForm.productName} onChange={(e) => setConsignmentForm({ ...consignmentForm, productName: e.target.value })} />
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <input className="clay-input" type="number" placeholder="Qty received" required min="1" value={consignmentForm.quantityReceived} onChange={(e) => setConsignmentForm({ ...consignmentForm, quantityReceived: e.target.value })} />
+                                <select className="clay-input" value={consignmentForm.unit} onChange={(e) => setConsignmentForm({ ...consignmentForm, unit: e.target.value })}>
+                                    <option value="crate">crate</option>
+                                    <option value="kg">kg</option>
+                                </select>
+                            </div>
+                            <input className="clay-input" type="number" placeholder="Minimum target (PKR)" required min="0" value={consignmentForm.minimumTargetAmount} onChange={(e) => setConsignmentForm({ ...consignmentForm, minimumTargetAmount: e.target.value })} />
+                            <input className="clay-input" type="number" placeholder="Fuel cost on beyopari (PKR)" min="0" value={consignmentForm.fuelCost} onChange={(e) => setConsignmentForm({ ...consignmentForm, fuelCost: e.target.value })} />
+                            <textarea className="clay-input" rows={2} placeholder="Notes" value={consignmentForm.notes} onChange={(e) => setConsignmentForm({ ...consignmentForm, notes: e.target.value })} />
+                            <button type="submit" className="clay-button primary">Create Consignment</button>
                         </form>
                     </div>
                 </div>
@@ -280,7 +344,7 @@ const Beyparis = () => {
                         <input 
                             type="text" 
                             className="clay-input" 
-                            placeholder="Search by name, ID or region..." 
+                            placeholder="Search by name or ID..." 
                             style={{ paddingLeft: '3rem' }} 
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -299,20 +363,27 @@ const Beyparis = () => {
                         <thead>
                             <tr style={{ borderBottom: '2px solid rgba(255,255,255,0.5)' }}>
                                 <th style={{ padding: '1rem', color: 'var(--text-muted)' }}>Name & ID</th>
-                                <th style={{ padding: '1rem', color: 'var(--text-muted)' }}>Region</th>
                                 <th style={{ padding: '1rem', color: 'var(--text-muted)' }}>Current Balance</th>
                                 <th style={{ padding: '1rem', color: 'var(--text-muted)' }}>Status</th>
                                 <th style={{ padding: '1rem', textAlign: 'right' }}>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredBeyparis.length > 0 ? filteredBeyparis.map((c, i) => (
+                            {loading ? (
+                                <tr>
+                                    <td colSpan="4" style={{ textAlign: 'center', padding: '5rem', color: 'var(--text-muted)' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                                            <div className="loading-spinner" style={{ width: '40px', height: '40px', border: '4px solid var(--warm-bg)', borderTop: '4px solid var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                                            <p>Syncing partner data via API...</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : filteredBeyparis.length > 0 ? filteredBeyparis.map((c, i) => (
                                 <tr key={c.id || i} style={{ borderBottom: '1px solid rgba(255,255,255,0.3)', position: 'relative' }}>
                                     <td style={{ padding: '1.2rem 1rem' }}>
                                         <div style={{ fontWeight: 600 }}>{c.name || 'Unknown'}</div>
-                                        <div style={{ fontSize: '0.8rem', opacity: 0.6 }}>{c.id || '-'}</div>
+                                        <div style={{ fontSize: '0.8rem', opacity: 0.6 }}>{c.partnerId || c.id || '-'}</div>
                                     </td>
-                                    <td style={{ padding: '1.2rem 1rem' }}>{c.area || 'Unknown'}</td>
                                     <td style={{ padding: '1.2rem 1rem' }}>
                                         <span style={{
                                             padding: '0.4rem 0.8rem',
@@ -348,7 +419,8 @@ const Beyparis = () => {
                                                     background: 'white', border: '1px solid rgba(0,0,0,0.05)'
                                                 }} onClick={(e) => e.stopPropagation()}>
                                                     <button className="nav-link" style={{ width: '100%', color: 'var(--text-main)', padding: '0.6rem 1rem', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', gap: '0.5rem', alignItems: 'center' }} onClick={() => { setSelectedBeypari(c); setOpenMenuId(null); }}><User size={16} /> View Profile</button>
-                                                    <button className="nav-link" style={{ width: '100%', color: 'var(--text-main)', padding: '0.6rem 1rem', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', gap: '0.5rem', alignItems: 'center' }} onClick={() => { navigate('/ledger'); setOpenMenuId(null); }}><FileText size={16} /> View Ledger</button>
+                                                    <button className="nav-link" style={{ width: '100%', color: 'var(--text-main)', padding: '0.6rem 1rem', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', gap: '0.5rem', alignItems: 'center' }} onClick={() => { setConsignmentBeypari(c); setShowConsignmentModal(true); setOpenMenuId(null); }}><Package size={16} /> New Consignment</button>
+                                                    <button className="nav-link" style={{ width: '100%', color: 'var(--text-main)', padding: '0.6rem 1rem', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', gap: '0.5rem', alignItems: 'center' }} onClick={() => { navigate('/settlements'); setOpenMenuId(null); }}><FileText size={16} /> Settlements</button>
                                                     <div style={{ height: '1px', background: 'rgba(0,0,0,0.05)', margin: '0.2rem 0' }}></div>
                                                     <button className="nav-link" style={{ width: '100%', color: 'var(--danger)', padding: '0.6rem 1rem', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', gap: '0.5rem', alignItems: 'center' }} onClick={() => handleDeleteBeypari(c.id)}><Trash2 size={16} /> Remove Beypari</button>
                                                 </div>
@@ -358,7 +430,7 @@ const Beyparis = () => {
                                 </tr>
                             )) : (
                                 <tr>
-                                    <td colSpan="5" style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
+                                    <td colSpan="4" style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>
                                         <AlertCircle style={{ width: '48px', height: '48px', margin: '0 auto 1rem', opacity: 0.2 }} />
                                         <p>No Beyparis found matching "{searchTerm}" {activeFilter !== 'All' ? `with status "${activeFilter}"` : ''}</p>
                                     </td>

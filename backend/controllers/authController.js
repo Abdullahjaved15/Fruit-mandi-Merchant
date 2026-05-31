@@ -24,12 +24,73 @@ export const authUser = async (req, res) => {
             _id: user._id,
             username: user.username,
             email: user.email,
+            phone: user.phone || '',
+            profileImage: user.profileImage || '',
             role: user.role,
             token: generateToken({ id: user._id, role: user.role }),
         });
     } else {
         res.status(401).json({ message: 'Invalid email or password' });
     }
+};
+
+// @desc    Get user profile
+// @route   GET /api/auth/profile
+// @access  Private
+export const getUserProfile = async (req, res) => {
+    if (!req.user) {
+        return res.status(401).json({ message: 'Not authorized' });
+    }
+
+    res.json({
+        _id: req.user._id,
+        username: req.user.username,
+        email: req.user.email,
+        phone: req.user.phone || '',
+        profileImage: req.user.profileImage || '',
+        role: req.user.role,
+    });
+};
+
+// @desc    Update user profile
+// @route   PUT /api/auth/profile
+// @access  Private
+export const updateUserProfile = async (req, res) => {
+    if (!req.user) {
+        return res.status(401).json({ message: 'Not authorized' });
+    }
+
+    const { username, email, phone, profileImage } = req.body;
+
+    if (typeof req.user.save !== 'function') {
+        // Handle dummy admin from .env
+        return res.json({
+            _id: req.user._id,
+            username: username || req.user.username,
+            email: email || process.env.ADMIN_EMAIL || 'admin@example.com',
+            phone: phone || '',
+            profileImage: profileImage || '',
+            role: req.user.role,
+            token: generateToken({ id: 'admin', role: 'admin' }),
+        });
+    }
+
+    if (username) req.user.username = username;
+    if (email) req.user.email = email.trim().toLowerCase();
+    if (typeof phone === 'string') req.user.phone = phone;
+    if (typeof profileImage === 'string') req.user.profileImage = profileImage;
+
+    const updatedUser = await req.user.save();
+
+    res.json({
+        _id: updatedUser._id,
+        username: updatedUser.username,
+        email: updatedUser.email,
+        phone: updatedUser.phone || '',
+        profileImage: updatedUser.profileImage || '',
+        role: updatedUser.role,
+        token: generateToken({ id: updatedUser._id, role: updatedUser.role }),
+    });
 };
 
 // @desc    Auth admin & get token (no public admin registration)
@@ -105,7 +166,7 @@ export const authAdmin = async (req, res) => {
 // @route   POST /api/auth/register
 // @access  Public
 export const registerUser = async (req, res) => {
-    const { username, email, password } = req.body;
+    const { username, email, password, phone } = req.body;
 
     const cleanEmail = email.trim().toLowerCase();
     const userExists = await User.findOne({ email: cleanEmail });
@@ -119,6 +180,7 @@ export const registerUser = async (req, res) => {
         username,
         email: cleanEmail,
         password,
+        phone: phone ?? '',
         role: 'user', 
     });
 
@@ -127,6 +189,8 @@ export const registerUser = async (req, res) => {
             _id: user._id,
             username: user.username,
             email: user.email,
+            phone: user.phone || '',
+            profileImage: user.profileImage || '',
             role: user.role,
             token: generateToken({ id: user._id, role: user.role }),
         });

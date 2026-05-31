@@ -1,47 +1,154 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useDispatch } from 'react-redux';
+import { updateUser } from '../redux/authSlice';
 import { User, Building, Lock, Globe, Save, UploadCloud, Shield, Smartphone, BellRing } from 'lucide-react';
 
 const Settings = ({ authData }) => {
     const isUser = authData?.role === 'user';
     const [activeTab, setActiveTab] = useState(isUser ? 'Profile' : 'Profile'); // Could be 'Dashboard' for user
+    const dispatch = useDispatch();
     const [profileData, setProfileData] = useState({ 
-        name: authData?.username || (isUser ? 'Customer' : 'Admin'), 
+        name: authData?.name || (isUser ? 'Customer' : 'Admin'), 
         email: authData?.email || '', 
-        phone: '' 
+        phone: authData?.phone || '' 
     });
     const [businessData, setBusinessData] = useState({ company: 'Kamyab Kissan', address: 'Mandi Market, Faisalabad', ntn: 'PK-82710-X' });
     const [securityData, setSecurityData] = useState({ currentPass: '', newPass: '', confirmPass: '', twoFactor: false });
     const [notificationSettings, setNotificationSettings] = useState({ orders: true, news: false, security: true });
     const [regionData, setRegionData] = useState({ language: 'English', currency: 'PKR', timezone: 'Asia/Karachi' });
+    const [statusMessage, setStatusMessage] = useState('');
     
-    const [profileImg, setProfileImg] = useState(null);
+    const [profileImg, setProfileImg] = useState(authData?.profileImage || null);
     const fileInputRef = useRef(null);
 
     // If no authData is passed, try to get from localStorage (fallback)
     useEffect(() => {
-        if (!authData) {
+        if (authData) {
+            setProfileData({
+                name: authData.name || (isUser ? 'Customer' : 'Admin'),
+                email: authData.email || '',
+                phone: authData.phone || ''
+            });
+            setProfileImg(authData.profileImage || null);
+        } else {
             const data = JSON.parse(localStorage.getItem('auth_data'));
             if (data) {
-                setProfileData(prev => ({ ...prev, name: data.username, email: data.email }));
+                setProfileData({
+                    name: data.name || (isUser ? 'Customer' : 'Admin'),
+                    email: data.email || '',
+                    phone: data.phone || ''
+                });
+                setProfileImg(data.profileImage || null);
             }
         }
-    }, [authData]);
+    }, [authData, isUser]);
 
-    const handleImageUpload = (e) => {
-        if(e.target.files && e.target.files[0]) {
-            setProfileImg(URL.createObjectURL(e.target.files[0]));
+    const handleImageUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('image', file);
+        
+        try {
+            const { default: api } = await import('../api/axios');
+            const uploadResult = await api.post('/upload', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+
+            const backendRoot = api.defaults.baseURL.replace(/\/api$/, '');
+            const imgUrl = uploadResult.data.image;
+            const fullUrl = imgUrl.startsWith('http') ? imgUrl : `${backendRoot}${imgUrl}`;
+            const { data } = await api.put('/auth/profile', { profileImage: fullUrl });
+
+            setProfileImg(data.profileImage || fullUrl);
+            dispatch(updateUser({ profileImage: data.profileImage || fullUrl }));
+            setStatusMessage('Profile picture updated successfully.');
+        } catch (err) {
+            console.error('Profile upload fail:', err);
+            setStatusMessage('Could not upload profile picture.');
         }
     };
 
-    const handleSave = (e, section) => {
+    // Fetch settings from DB on load
+    useEffect(() => {
+        import('../api/axios').then(({ default: api }) => {
+            api.get('/data/system-settings').then(({ data }) => {
+                if (data && data.length > 0) {
+                    const business = data.find(s => s.key === 'business_info');
+                    if (business) setBusinessData(business.value);
+                    
+                    const region = data.find(s => s.key === 'region_settings');
+                    if (region) setRegionData(region.value);
+                }
+            }).catch(err => console.error("Settings fetch fail:", err));
+        });
+    }, []);
+
+    const handleSave = async (e, section) => {
         e.preventDefault();
-        alert(`${section} settings updated successfully!`);
+        setStatusMessage('');
+
+        if (section === 'Profile') {
+            try {
+                const { default: api } = await import('../api/axios');
+                const { data } = await api.put('/auth/profile', {
+                    username: profileData.name,
+                    email: profileData.email,
+                    phone: profileData.phone,
+                });
+
+                setProfileData({
+                    name: data.username,
+                    email: data.email,
+                    phone: data.phone || ''
+                });
+                dispatch(updateUser({
+                    name: data.username,
+                    email: data.email,
+                    phone: data.phone || '',
+                }));
+                setStatusMessage('Profile updated successfully.');
+            } catch (err) {
+                console.error('Profile update fail:', err);
+                setStatusMessage('Could not update profile.');
+            }
+            return;
+        }
+
+        import('../api/axios').then(({ default: api }) => {
+            let key = '';
+            let val = {};
+            
+            if (section === 'Business') {
+                key = 'business_info';
+                val = businessData;
+            } else if (section === 'Region') {
+                key = 'region_settings';
+                val = regionData;
+            }
+
+            if (key) {
+                api.get('/data/system-settings').then(({ data }) => {
+                    const existing = data.find(s => s.key === key);
+                    if (existing) {
+                        api.put(`/data/system-settings/${existing._id}`, { key, value: val });
+                    } else {
+                        api.post('/data/system-settings', { key, value: val });
+                    }
+                }).finally(() => {
+                    setStatusMessage(`${section} settings saved.`);
+                });
+            } else {
+                setStatusMessage(`${section} settings updated.`);
+            }
+        });
     };
 
     const navItems = [
         { id: 'Profile', icon: <User />, label: 'Profile' },
         !isUser && { id: 'Business', icon: <Building />, label: 'Business Details' },
-        { id: 'Security', icon: <Lock />, label: 'Security & Pass' },
+        { id: 'Security', icon: <Lock />, label: isUser ? 'Change Password' : 'Security & Pass' },
         { id: 'Region', icon: <Globe />, label: 'Region' },
         isUser && { id: 'Notifications', icon: <BellRing />, label: 'Notifications' },
     ].filter(Boolean);
@@ -89,7 +196,11 @@ const Settings = ({ authData }) => {
 
                 {/* Content Area */}
                 <div className="clay-card" style={{ padding: '3rem', minHeight: '500px', animation: 'fadeIn 0.3s ease-out' }}>
-                    
+                    {statusMessage && (
+                        <div style={{ marginBottom: '1.5rem', padding: '1rem 1.25rem', background: 'var(--warm-bg)', borderRadius: '18px', color: 'var(--text-main)', fontWeight: 600 }}>
+                            {statusMessage}
+                        </div>
+                    )}
                     {/* PROFILE TAB */}
                     {activeTab === 'Profile' && (
                         <div>
@@ -164,21 +275,23 @@ const Settings = ({ authData }) => {
                         <div style={{ animation: 'slideRight 0.3s ease-out' }}>
                             <h3 style={{ marginBottom: '2.5rem', fontSize: '1.8rem', display: 'flex', alignItems: 'center', gap: '0.8rem' }}><Shield size={28} color="var(--primary)" /> Security Settings</h3>
                             
-                            <div className="clay-card" style={{ background: '#f8fafc', boxShadow: 'none', border: '2px solid #e2e8f0', marginBottom: '2.5rem', padding: '2rem' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div>
-                                        <h4 style={{ fontSize: '1.2rem', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Smartphone size={18} color="var(--success)" /> Two-Factor Authentication</h4>
-                                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: 0 }}>Add an extra layer of security requiring an SMS code to login.</p>
+                            {!isUser && (
+                                <div className="clay-card" style={{ background: '#f8fafc', boxShadow: 'none', border: '2px solid #e2e8f0', marginBottom: '2.5rem', padding: '2rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <h4 style={{ fontSize: '1.2rem', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Smartphone size={18} color="var(--success)" /> Two-Factor Authentication</h4>
+                                            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: 0 }}>Add an extra layer of security requiring an SMS code to login.</p>
+                                        </div>
+                                        <button 
+                                            className={`clay-button ${securityData.twoFactor ? 'primary' : ''}`} 
+                                            style={{ background: securityData.twoFactor ? 'var(--success)' : 'var(--warm-bg)', color: securityData.twoFactor ? 'white' : 'var(--text-muted)' }}
+                                            onClick={() => setSecurityData({...securityData, twoFactor: !securityData.twoFactor})}
+                                        >
+                                            {securityData.twoFactor ? 'Enabled' : 'Disabled'}
+                                        </button>
                                     </div>
-                                    <button 
-                                        className={`clay-button ${securityData.twoFactor ? 'primary' : ''}`} 
-                                        style={{ background: securityData.twoFactor ? 'var(--success)' : 'var(--warm-bg)', color: securityData.twoFactor ? 'white' : 'var(--text-muted)' }}
-                                        onClick={() => setSecurityData({...securityData, twoFactor: !securityData.twoFactor})}
-                                    >
-                                        {securityData.twoFactor ? 'Enabled' : 'Disabled'}
-                                    </button>
                                 </div>
-                            </div>
+                            )}
 
                             <form onSubmit={(e) => handleSave(e, 'Security')} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                                 <h4 style={{ fontSize: '1.1rem', paddingBottom: '0.5rem', borderBottom: '1px solid #f1f5f9', marginBottom: '0.5rem' }}>Change Password</h4>

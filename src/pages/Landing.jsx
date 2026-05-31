@@ -35,7 +35,7 @@ const Landing = () => {
 
             {/* Sticky Navigation */}
             <nav className="landing-nav">
-                <div 
+                <div
                     style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer', userSelect: 'none' }}
                     onClick={handleLogoClick}
                 >

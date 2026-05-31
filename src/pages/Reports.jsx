@@ -1,27 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
-import { FileCheck, Printer, Download, Eye, X, Landmark, User, FileText, CheckCircle2, TrendingUp, DollarSign, PieChart, BarChart3, Receipt } from 'lucide-react';
+import { FileCheck, Printer, Download, Eye, X, Landmark, User, FileText, CheckCircle2, TrendingUp, DollarSign, PieChart, BarChart3, Receipt, Percent } from 'lucide-react';
 
 const Reports = () => {
     const [invoiceType, setInvoiceType] = useState('Beypari Settlement');
     const [entityName, setEntityName] = useState('');
     const [amount, setAmount] = useState('');
+    const [commissionRate, setCommissionRate] = useState('8');
+    const [fbrRate, setFbrRate] = useState('2');
+    
     const [isGenerated, setIsGenerated] = useState(false);
     const [invoiceDate, setInvoiceDate] = useState(new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }));
     const [invoiceNumber, setInvoiceNumber] = useState('INV-77488');
 
     // Recent History State
     const [history, setHistory] = useState([]);
+    
+    // Stats State
+    const [stats, setStats] = useState({ monthlyVolume: 0, commissionEarned: 0, taxLiability: 0 });
+    
+    // Dropdown Data State
+    const [beyparis, setBeyparis] = useState([]);
+    const [customers, setCustomers] = useState([]);
+    const [businessInfo, setBusinessInfo] = useState({ company: 'Javed & Sons', address: 'Gate No. 4, Fruit Market, Sargodha Road, Faisalabad' });
 
-    // Silently load real data from DB in background
     useEffect(() => {
+        // Fetch History
         api.get('/data/reports')
             .then(({ data }) => { 
                 if (data && data.length > 0) {
                     setHistory(data.map(h => ({ 
                         ...h, 
-                        id: h._id, // Use for API calls
-                        invoiceId: h.invoiceId || h._id, // For display
+                        id: h._id,
+                        invoiceId: h.invoiceId || h._id,
                         entity: h.entity || 'Unknown',
                         type: h.type || 'Settlement',
                         date: h.date || '-',
@@ -30,7 +41,58 @@ const Reports = () => {
                 }
             })
             .catch((err) => console.error("Reports fetch fail:", err));
+
+        // Fetch Stats
+        api.get('/data/reports/stats')
+            .then(({ data }) => {
+                if (data) setStats(data);
+            })
+            .catch((err) => console.error("Stats fetch fail:", err));
+
+        api.get('/data/beyparis').then(({ data }) => setBeyparis(data || []));
+        api.get('/data/customers').then(({ data }) => setCustomers(data || []));
+
+        // Fetch Business Info for Invoice Letterhead
+        api.get('/data/system-settings').then(({ data }) => {
+            if (data && data.length > 0) {
+                const business = data.find(s => s.key === 'business_info');
+                if (business && business.value) {
+                    setBusinessInfo({
+                        company: business.value.company || 'Javed & Sons',
+                        address: business.value.address || 'Gate No. 4, Fruit Market, Sargodha Road, Faisalabad'
+                    });
+                }
+            }
+        }).catch(err => console.error("Settings fetch fail:", err));
     }, []);
+
+    // Handle Dropdown Entity change
+    const handleEntityChange = (e) => {
+        const selectedName = e.target.value;
+        setEntityName(selectedName);
+        
+        if (invoiceType === 'Beypari Settlement') {
+            const beypari = beyparis.find(b => b.name === selectedName);
+            if (beypari && beypari.commissionRate !== undefined) {
+                setCommissionRate(beypari.commissionRate.toString());
+            } else {
+                setCommissionRate('8');
+            }
+        }
+    };
+
+    // Handle Report Type change
+    const handleTypeChange = (e) => {
+        const newType = e.target.value;
+        setInvoiceType(newType);
+        setEntityName('');
+        
+        if (newType === 'Customer Statement') {
+            setCommissionRate('0');
+        } else if (newType === 'Beypari Settlement') {
+            setCommissionRate('8');
+        }
+    };
 
     const handleGenerate = () => {
         if (!entityName || !amount) {
@@ -59,11 +121,7 @@ const Reports = () => {
         if (window.confirm("Are you sure you want to delete this invoice record from history?")) {
             setHistory(prev => prev.filter(h => h.id !== id));
             api.delete(`/data/reports/${id}`)
-                .then(() => console.log("Invoice deleted from DB"))
-                .catch((err) => {
-                    console.error("Delete fail:", err);
-                    alert("Database sync failed.");
-                });
+                .catch((err) => console.error("Delete fail:", err));
         }
     };
 
@@ -74,30 +132,26 @@ const Reports = () => {
         setInvoiceNumber(item.id);
         setInvoiceDate(item.date);
         setIsGenerated(true);
-        // Scroll to preview
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const handlePrint = () => {
         if (!isGenerated) return;
-        const printContent = document.getElementById('printable-invoice');
-        const originalContent = document.body.innerHTML;
-        document.body.innerHTML = printContent.innerHTML;
         window.print();
-        document.body.innerHTML = originalContent;
-        window.location.reload();
     };
 
     // Derived calculations
     const amt = parseFloat(amount) || 0;
-    const commRate = 0.08; 
+    const commRate = parseFloat(commissionRate) / 100 || 0; 
+    const taxRate = parseFloat(fbrRate) / 100 || 0;
+    
     const commission = amt * commRate;
-    const tax = (amt - commission) * 0.02; 
-    const netTotal = amt - commission - tax;
+    const tax = amt * taxRate; 
+    const netTotal = amt + commission + tax;
 
     return (
         <div className="page-content">
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+            <header className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
                 <div>
                     <h1 style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Invoices & Reports</h1>
                     <p style={{ color: 'var(--text-muted)' }}>Generate Beypari settlements and analytical reports.</p>
@@ -105,36 +159,36 @@ const Reports = () => {
             </header>
 
             {/* Summary Stats Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '2rem', marginBottom: '3rem' }}>
+            <div className="no-print" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '2rem', marginBottom: '3rem' }}>
                 <div className="clay-card">
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
                         <div className="stat-icon" style={{ background: '#e0f2fe', color: '#0369a1' }}><TrendingUp size={24} /></div>
                         <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700 }}>MONTHLY VOLUME</span>
                     </div>
-                    <h2 style={{ fontSize: '2rem' }}>PKR 0</h2>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>No data for current month</div>
+                    <h2 style={{ fontSize: '2rem' }}>PKR {stats.monthlyVolume.toLocaleString()}</h2>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Gross sales for current month</div>
                 </div>
                 <div className="clay-card">
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
                         <div className="stat-icon" style={{ background: '#dcfce7', color: '#166534' }}><PieChart size={24} /></div>
                         <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700 }}>COMMISSION EARNED</span>
                     </div>
-                    <h2 style={{ fontSize: '2rem' }}>PKR 0</h2>
-                    <div style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: '0.5rem' }}>Avg. 0% across all entity</div>
+                    <h2 style={{ fontSize: '2rem' }}>PKR {stats.commissionEarned.toLocaleString()}</h2>
+                    <div style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: '0.5rem' }}>Net commission for current month</div>
                 </div>
                 <div className="clay-card">
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
                         <div className="stat-icon" style={{ background: '#fee2e2', color: '#991b1b' }}><BarChart3 size={24} /></div>
                         <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 700 }}>TAX LIABILITY</span>
                     </div>
-                    <h2 style={{ fontSize: '2rem' }}>PKR 0</h2>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>No pending tax payments</div>
+                    <h2 style={{ fontSize: '2rem' }}>PKR {stats.taxLiability.toLocaleString()}</h2>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>Estimated 2% FBR withholding tax</div>
                 </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '3rem', marginBottom: '3rem' }}>
                 {/* Generator Form */}
-                <div className="clay-card" style={{ height: 'fit-content' }}>
+                <div className="clay-card no-print" style={{ height: 'fit-content' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '1.5rem' }}>
                         <div style={{ padding: '0.5rem', background: 'var(--primary-light)', borderRadius: '12px', color: 'var(--primary)' }}><FileCheck size={20} /></div>
                         <h3 style={{ margin: 0 }}>Invoice Generator</h3>
@@ -145,8 +199,7 @@ const Reports = () => {
                             <select 
                                 className="clay-input" 
                                 value={invoiceType} 
-                                onChange={(e) => setInvoiceType(e.target.value)}
-                                style={{ appearance: 'none' }}
+                                onChange={handleTypeChange}
                             >
                                 <option>Beypari Settlement</option>
                                 <option>Customer Statement</option>
@@ -157,14 +210,31 @@ const Reports = () => {
                             <label style={{ display: 'block', marginBottom: '0.6rem', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-muted)' }}>Entity Name</label>
                             <div style={{ position: 'relative' }}>
                                 <User style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', width: '16px' }} />
-                                <input 
-                                    type="text" 
-                                    className="clay-input" 
-                                    placeholder="e.g. Nawaz Farms" 
-                                    style={{ paddingLeft: '2.8rem' }}
-                                    value={entityName}
-                                    onChange={(e) => setEntityName(e.target.value)}
-                                />
+                                {invoiceType === 'Daily Summary' ? (
+                                    <input 
+                                        type="text" 
+                                        className="clay-input" 
+                                        placeholder="e.g. Daily General" 
+                                        style={{ paddingLeft: '2.8rem' }}
+                                        value={entityName}
+                                        onChange={(e) => setEntityName(e.target.value)}
+                                    />
+                                ) : (
+                                    <select
+                                        className="clay-input"
+                                        style={{ paddingLeft: '2.8rem' }}
+                                        value={entityName}
+                                        onChange={handleEntityChange}
+                                    >
+                                        <option value="">Select Entity...</option>
+                                        {invoiceType === 'Beypari Settlement' && beyparis.map((b) => (
+                                            <option key={b._id} value={b.name}>{b.name}</option>
+                                        ))}
+                                        {invoiceType === 'Customer Statement' && customers.map((c) => (
+                                            <option key={c._id} value={c.name}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                )}
                             </div>
                         </div>
                         <div>
@@ -181,6 +251,36 @@ const Reports = () => {
                                 />
                             </div>
                         </div>
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.6rem', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-muted)' }}>Commission %</label>
+                                <div style={{ position: 'relative' }}>
+                                    <Percent style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', width: '16px' }} />
+                                    <input 
+                                        type="number" 
+                                        className="clay-input" 
+                                        style={{ paddingLeft: '2.8rem' }}
+                                        value={commissionRate}
+                                        onChange={(e) => setCommissionRate(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.6rem', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-muted)' }}>FBR Tax %</label>
+                                <div style={{ position: 'relative' }}>
+                                    <Percent style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', width: '16px' }} />
+                                    <input 
+                                        type="number" 
+                                        className="clay-input" 
+                                        style={{ paddingLeft: '2.8rem' }}
+                                        value={fbrRate}
+                                        onChange={(e) => setFbrRate(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
                         <button type="button" className="clay-button primary" style={{ marginTop: '1rem', height: '55px', borderRadius: '18px' }} onClick={handleGenerate}><FileCheck /> Generate Final Invoice</button>
                     </form>
                 </div>
@@ -190,9 +290,9 @@ const Reports = () => {
                     <div id="printable-invoice" className="clay-card" style={{ background: 'white', padding: '3.5rem', borderRadius: '24px', minHeight: '600px', display: 'flex', flexDirection: 'column', color: '#1e293b' }}>
                         {/* Letterhead */}
                         <div style={{ textAlign: 'center', marginBottom: '3rem', borderBottom: '2px solid #f1f5f9', paddingBottom: '2rem' }}>
-                            <h2 style={{ color: 'var(--primary)', fontSize: '2.4rem', margin: '0 0 0.5rem 0', letterSpacing: '-0.02em' }}>Javed & Sons</h2>
+                            <h2 style={{ color: 'var(--primary)', fontSize: '2.4rem', margin: '0 0 0.5rem 0', letterSpacing: '-0.02em' }}>{businessInfo.company}</h2>
                             <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Commercial Fruit & Vegetable Commission Merchants</p>
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.4rem' }}>Gate No. 4, Fruit Market, Sargodha Road, Faisalabad</p>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.4rem' }}>{businessInfo.address}</p>
                         </div>
 
                         {isGenerated ? (
@@ -222,7 +322,7 @@ const Reports = () => {
                                     </thead>
                                     <tbody>
                                         <tr>
-                                            <td style={{ padding: '1.5rem 1rem', borderBottom: '1px solid #f1f5f9' }}>Total Consignments Sales (Gross)</td>
+                                            <td style={{ padding: '1.5rem 1rem', borderBottom: '1px solid #f1f5f9' }}>Total Sales (Gross)</td>
                                             <td style={{ padding: '1.5rem 1rem', textAlign: 'right', borderBottom: '1px solid #f1f5f9' }}>{amt.toLocaleString()}</td>
                                             <td style={{ padding: '1.5rem 1rem', textAlign: 'right', borderBottom: '1px solid #f1f5f9' }}>1.0x</td>
                                             <td style={{ padding: '1.5rem 1rem', textAlign: 'right', borderBottom: '1px solid #f1f5f9' }}>PKR {amt.toLocaleString()}</td>
@@ -230,14 +330,14 @@ const Reports = () => {
                                         <tr>
                                             <td style={{ padding: '1.5rem 1rem', borderBottom: '1px solid #f1f5f9' }}>Commission (Agent Fee)</td>
                                             <td style={{ padding: '1.5rem 1rem', textAlign: 'right', borderBottom: '1px solid #f1f5f9' }}>-</td>
-                                            <td style={{ padding: '1.5rem 1rem', textAlign: 'right', borderBottom: '1px solid #f1f5f9' }}>8%</td>
-                                            <td style={{ padding: '1.5rem 1rem', textAlign: 'right', borderBottom: '1px solid #f1f5f9', color: 'var(--danger)' }}>- {commission.toLocaleString()}</td>
+                                            <td style={{ padding: '1.5rem 1rem', textAlign: 'right', borderBottom: '1px solid #f1f5f9' }}>{commissionRate}%</td>
+                                            <td style={{ padding: '1.5rem 1rem', textAlign: 'right', borderBottom: '1px solid #f1f5f9', color: 'var(--success)' }}>+ {commission.toLocaleString()}</td>
                                         </tr>
                                         <tr>
-                                            <td style={{ padding: '1.5rem 1rem', borderBottom: '1px solid #f1f5f9' }}>Withholding Tax (FBR 2%)</td>
+                                            <td style={{ padding: '1.5rem 1rem', borderBottom: '1px solid #f1f5f9' }}>Withholding Tax (FBR)</td>
                                             <td style={{ padding: '1.5rem 1rem', textAlign: 'right', borderBottom: '1px solid #f1f5f9' }}>-</td>
-                                            <td style={{ padding: '1.5rem 1rem', textAlign: 'right', borderBottom: '1px solid #f1f5f9' }}>2%</td>
-                                            <td style={{ padding: '1.5rem 1rem', textAlign: 'right', borderBottom: '1px solid #f1f5f9', color: 'var(--danger)' }}>- {tax.toLocaleString()}</td>
+                                            <td style={{ padding: '1.5rem 1rem', textAlign: 'right', borderBottom: '1px solid #f1f5f9' }}>{fbrRate}%</td>
+                                            <td style={{ padding: '1.5rem 1rem', textAlign: 'right', borderBottom: '1px solid #f1f5f9', color: 'var(--success)' }}>+ {tax.toLocaleString()}</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -248,9 +348,9 @@ const Reports = () => {
                                             <span>Subtotal</span>
                                             <span>PKR {amt.toLocaleString()}</span>
                                         </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', color: 'var(--danger)' }}>
-                                            <span>Abatement</span>
-                                            <span>- {(commission + tax).toLocaleString()}</span>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', color: 'var(--success)' }}>
+                                            <span>Taxes & Fees</span>
+                                            <span>+ {(commission + tax).toLocaleString()}</span>
                                         </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1rem 0', borderTop: '2px solid #e2e8f0', marginTop: '0.5rem', fontSize: '1.4rem', fontWeight: 800 }}>
                                             <span>Net Total</span>
@@ -276,7 +376,7 @@ const Reports = () => {
                             </div>
                         )}
 
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '3rem', paddingTop: '2rem', borderTop: '2px solid #f8fafc' }}>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '3rem', paddingTop: '2rem', borderTop: '2px solid #f8fafc' }} className="no-print">
                             <button className="clay-button" style={{ height: '50px', padding: '0 1.5rem' }} onClick={handlePrint} disabled={!isGenerated}><Printer size={18} /> Print Invoice</button>
                             <button className="clay-button primary" style={{ height: '50px', padding: '0 2rem' }} onClick={handlePrint} disabled={!isGenerated}><Download size={18} /> Save as PDF</button>
                         </div>
@@ -285,7 +385,7 @@ const Reports = () => {
             </div>
 
             {/* History Table */}
-            <div className="clay-card">
+            <div className="clay-card no-print">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '2rem' }}>
                     <div style={{ padding: '0.5rem', background: 'var(--warm-bg)', borderRadius: '12px' }}><Receipt size={20} /></div>
                     <h3 style={{ margin: 0 }}>Recent Invoice Logs</h3>
@@ -331,5 +431,3 @@ const Reports = () => {
 };
 
 export default Reports;
-
-

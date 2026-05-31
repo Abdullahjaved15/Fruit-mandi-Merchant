@@ -163,14 +163,14 @@ const StoreCart = ({ cartItems, removeFromCart, updateQuantity, clearCart }) => 
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', marginTop: '1.5rem' }}>
                                         <div className="quantity-control-clay" style={{ background: '#f5f5f5', borderRadius: '15px' }}>
-                                            <button onClick={() => updateQuantity(item.name, -1)} style={{ padding: '0.4rem 0.8rem', fontSize: '1.4rem' }}>-</button>
+                                            <button onClick={() => updateQuantity(item.id, -1)} style={{ padding: '0.4rem 0.8rem', fontSize: '1.4rem' }}>-</button>
                                             <span style={{ fontWeight: 800, minWidth: '30px', textAlign: 'center' }}>{item.quantity}</span>
-                                            <button onClick={() => updateQuantity(item.name, 1)} style={{ padding: '0.4rem 0.8rem', fontSize: '1.4rem' }}>+</button>
+                                            <button onClick={() => updateQuantity(item.id, 1)} style={{ padding: '0.4rem 0.8rem', fontSize: '1.4rem' }}>+</button>
                                         </div>
                                         <button 
                                             className="clay-button" 
                                             style={{ padding: '0.5rem', background: '#fff1f1', color: '#f87171', border: 'none', borderRadius: '12px' }}
-                                            onClick={() => removeFromCart(item.name)}
+                                            onClick={() => removeFromCart(item.id)}
                                         >
                                             <Trash2 size={20} />
                                         </button>

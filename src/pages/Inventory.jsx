@@ -1,20 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import api from '../api/axios';
-import { Search, Plus, Filter, Download, MoreVertical, Package, Flame, AlertTriangle, X, Edit, Trash2, ArrowUpRight, CheckCircle2, Thermometer, ShieldCheck } from 'lucide-react';
+import api, { API_ORIGIN } from '../api/axios';
+import { Search, Plus, Filter, Download, MoreVertical, Package, Flame, AlertTriangle, X, Edit, Trash2, ArrowUpRight, CheckCircle2, Thermometer, ShieldCheck, Camera, UploadCloud, FileText } from 'lucide-react';
+import { jsPDF } from "jspdf";
+
+const fruitOptions = [
+    'Citrus', 'Apples', 'Mangoes', 'Grapes', 'Bananas', 'Guava', 'Pomegranate',
+    'Watermelon', 'Papaya', 'Pear', 'Dates', 'Plum', 'Kiwi', 'Strawberry',
+    'Pineapple', 'Lychee', 'Cherry', 'Apricot', 'Custard Apple', 'Persimmon'
+];
+import "jspdf-autotable";
+import * as XLSX from 'xlsx';
 
 const Inventory = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [activeFilter, setActiveFilter] = useState('All Categories');
     const [showAddModal, setShowAddModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(null);
+    const [editData, setEditData] = useState({ stock: '', health: '' });
     const [showMenuId, setShowMenuId] = useState(null);
 
     const [products, setProducts] = useState([]);
+    const [beyparis, setBeyparis] = useState([]);
+    const [loading, setLoading] = useState(true);
 
     const fetchInventory = async () => {
+        setLoading(true);
         try {
             const { data } = await api.get('/data/inventory');
-            if (data && data.length > 0) {
+            if (data && Array.isArray(data)) {
                 setProducts(data.map(p => ({
                     ...p,
                     id: p._id,
@@ -27,21 +40,56 @@ const Inventory = () => {
                     health: p.health || '100%',
                     status: p.status || 'In Stock'
                 })));
-            } else {
-                setProducts([]);
             }
         } catch (err) {
             console.error("Inventory fetch fail:", err);
+        } finally {
+            setLoading(false);
         }
     };
 
     // Load from DB
     useEffect(() => {
         fetchInventory();
+        fetchBeyparis();
     }, []);
 
-    const [newProduct, setNewProduct] = useState({ name: '', sku: '', stock: '', price: '', category: 'Citrus', unit: 'Crates' });
-    const [editData, setEditData] = useState({ stock: '', health: '' });
+    const fetchBeyparis = async () => {
+        try {
+            const { data } = await api.get('/data/beyparis');
+            if (Array.isArray(data)) {
+                setBeyparis(data.map(b => ({ id: b._id, name: b.name || 'Unknown', partnerId: b.partnerId || b._id })));
+            }
+        } catch (err) {
+            console.error('Beyparis fetch fail:', err);
+        }
+    };
+
+    const [newProduct, setNewProduct] = useState({ name: '', sku: '', stock: '', price: '', category: 'Citrus', unit: 'Crates', img: '', beypariId: '', beypariName: '' });
+    const [uploading, setUploading] = useState(false);
+
+    const handleImageUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('image', file);
+        setUploading(true);
+
+        try {
+            const { data } = await api.post('/upload', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            const imgUrl = data.image;
+            const fullUrl = imgUrl.startsWith('http') ? imgUrl : `${API_ORIGIN}${imgUrl}`;
+            setNewProduct(prev => ({ ...prev, img: fullUrl }));
+        } catch (err) {
+            console.error("Upload fail:", err);
+            alert("Failed to upload image. Please try again.");
+        } finally {
+            setUploading(false);
+        }
+    };
 
     const getFruitImage = (name, category) => {
         const key = ((name || '') + ' ' + (category || '')).toLowerCase();
@@ -63,20 +111,24 @@ const Inventory = () => {
     const handleAddProduct = async (e, inShop = false) => {
         e.preventDefault();
         const stockValue = parseInt(newProduct.stock) || 0;
+        const autoSku = newProduct.sku?.trim() || `INV-${String(products.length + 1).padStart(3, '0')}`;
         const p = {
             ...newProduct,
-            img: getFruitImage(newProduct.name, newProduct.category),
+            sku: autoSku,
+            img: newProduct.img || getFruitImage(newProduct.name, newProduct.category),
             health: "100%",
             stock: stockValue,
             isSoldInShop: inShop,
-            status: stockValue === 0 ? "Out of Stock" : stockValue < 25 ? "Low Stock" : "In Stock"
+            status: stockValue === 0 ? "Out of Stock" : stockValue < 25 ? "Low Stock" : "In Stock",
+            beypariName: newProduct.beypariName || '',
+            beypariId: newProduct.beypariId || ''
         };
         
         try {
             await api.post('/data/inventory', p);
             await fetchInventory();
             setShowAddModal(false);
-            setNewProduct({ name: '', sku: '', stock: '', price: '', category: 'Citrus', unit: 'Crates' });
+            setNewProduct({ name: '', sku: '', stock: '', price: '', category: 'Citrus', unit: 'Crates', img: '', beypariId: '', beypariName: '' });
         } catch (err) {
             console.error("Inventory save fail:", err);
             alert("Failed to save product to database.");
@@ -133,18 +185,44 @@ const Inventory = () => {
         }
     };
 
-    const handleExportCSV = () => {
-        const headers = ["Product", "SKU", "Category", "Stock", "Unit", "Status", "Quality"];
-        const csvContent = [
-            headers.join(","),
-            ...products.map(p => `${p.name},${p.sku},${p.category},${p.stock},${p.unit},${p.status},${p.health}`)
-        ].join("\n");
+    const handleExportExcel = () => {
+        const data = filteredProducts.map(p => ({
+            Product: p.name,
+            SKU: p.sku,
+            Category: p.category,
+            Stock: p.stock,
+            Unit: p.unit,
+            Price: p.price,
+            Status: p.status,
+            Quality: p.health
+        }));
+        
+        const worksheet = XLSX.utils.json_to_sheet(data);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
+        XLSX.writeFile(workbook, `Inventory_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    };
 
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        link.setAttribute("href", URL.createObjectURL(blob));
-        link.setAttribute("download", `Inventory_Report_${new Date().toLocaleDateString()}.csv`);
-        link.click();
+    const handleExportPDF = () => {
+        const doc = new jsPDF();
+        doc.text("Javed & Sons - Inventory Report", 14, 15);
+        doc.setFontSize(10);
+        doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 22);
+        
+        const tableColumn = ["Product", "SKU", "Category", "Stock", "Unit", "Price", "Status"];
+        const tableRows = filteredProducts.map(p => [
+            p.name, p.sku, p.category, p.stock, p.unit, `RS ${p.price}`, p.status
+        ]);
+
+        doc.autoTable({
+            head: [tableColumn],
+            body: tableRows,
+            startY: 30,
+            theme: 'grid',
+            headStyles: { fillStyle: 'var(--primary)', fillColor: [22, 163, 74] }
+        });
+        
+        doc.save(`Inventory_Report_${new Date().toISOString().split('T')[0]}.pdf`);
     };
 
     const filteredProducts = products.filter(p => {
@@ -169,7 +247,17 @@ const Inventory = () => {
                 <div style={{ display: 'flex', gap: '1rem' }}>
                     <button className="clay-button" style={{ border: '2px solid var(--primary)', color: 'var(--primary)' }} onClick={() => setShowAddModal('shop')}><Plus /> Add Stock in Shop</button>
                     <button className="clay-button primary" onClick={() => setShowAddModal('inventory')}><Plus /> Add Stock (Private)</button>
-                    <button className="clay-button" onClick={handleExportCSV}><Download /> Export</button>
+                    <div style={{ position: 'relative', display: 'inline-block' }}>
+                        <button className="clay-button" onClick={() => setShowMenuId(showMenuId === 'export' ? null : 'export')}>
+                            <Download /> Export <MoreVertical size={14} />
+                        </button>
+                        {showMenuId === 'export' && (
+                            <div className="clay-card" style={{ position: 'absolute', right: 0, top: '55px', zIndex: 1000, width: '150px', padding: '0.5rem', background: 'white', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                                <button className="menu-item" style={{ width: '100%', padding: '0.8rem', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '12px' }} onClick={handleExportExcel}>Excel (.xlsx)</button>
+                                <button className="menu-item" style={{ width: '100%', padding: '0.8rem', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', borderRadius: '12px' }} onClick={handleExportPDF}>PDF (.pdf)</button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </header>
 
@@ -184,12 +272,25 @@ const Inventory = () => {
                         <form onSubmit={(e) => handleAddProduct(e, showAddModal === 'shop')} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                             <div>
                                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Product Name</label>
-                                <input type="text" className="clay-input" required placeholder="e.g. Red Apple (Kasmir)" value={newProduct.name} onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })} />
+                                <input
+                                    type="text"
+                                    list="fruit-options"
+                                    className="clay-input"
+                                    required
+                                    placeholder="Choose or search fruit"
+                                    value={newProduct.name}
+                                    onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                                />
+                                <datalist id="fruit-options">
+                                    {fruitOptions.map((fruit) => (
+                                        <option key={fruit} value={fruit} />
+                                    ))}
+                                </datalist>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                                 <div>
                                     <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>SKU Code</label>
-                                    <input type="text" className="clay-input" required placeholder="FR-882" value={newProduct.sku} onChange={(e) => setNewProduct({ ...newProduct, sku: e.target.value })} />
+                                    <input type="text" className="clay-input" placeholder="Leave blank to auto-generate" value={newProduct.sku} onChange={(e) => setNewProduct({ ...newProduct, sku: e.target.value })} />
                                 </div>
                                 <div>
                                     <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Crate Price (₨)</label>
@@ -204,10 +305,7 @@ const Inventory = () => {
                                 <div>
                                     <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Category</label>
                                     <select className="clay-input" value={newProduct.category} onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}>
-                                        <option>Citrus</option>
-                                        <option>Apples</option>
-                                        <option>Mangoes</option>
-                                        <option>Tropical</option>
+                                        {fruitOptions.map((fruit) => <option key={fruit}>{fruit}</option>)}
                                     </select>
                                 </div>
                                 <div>
@@ -219,7 +317,58 @@ const Inventory = () => {
                                     </select>
                                 </div>
                             </div>
-                            <button type="submit" className="clay-button primary" style={{ height: '60px', marginTop: '1rem', fontSize: '1.1rem' }}>Register Stock</button>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Associated Beypari</label>
+                                <select
+                                    className="clay-input"
+                                    value={newProduct.beypariId}
+                                    onChange={(e) => {
+                                        const selected = beyparis.find(b => b.id === e.target.value);
+                                        setNewProduct({
+                                            ...newProduct,
+                                            beypariId: selected?.id || '',
+                                            beypariName: selected?.name || ''
+                                        });
+                                    }}
+                                >
+                                    <option value="">None selected</option>
+                                    {beyparis.map((bp) => (
+                                        <option key={bp.id} value={bp.id}>{bp.name} ({bp.partnerId})</option>
+                                    ))}
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Product Image</label>
+                                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                    <div style={{ width: '80px', height: '80px', borderRadius: '15px', background: 'var(--warm-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', border: '2px dashed #cbd5e1' }}>
+                                        {newProduct.img ? (
+                                            <img src={newProduct.img} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        ) : (
+                                            <Camera size={24} color="#64748b" />
+                                        )}
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <input 
+                                            type="file" 
+                                            id="product-image-upload" 
+                                            onChange={handleImageUpload} 
+                                            style={{ display: 'none' }} 
+                                            accept="image/*"
+                                        />
+                                        <label 
+                                            htmlFor="product-image-upload" 
+                                            className="clay-button" 
+                                            style={{ width: '100%', cursor: 'pointer', fontSize: '0.9rem', gap: '0.5rem', background: uploading ? '#f1f5f9' : 'white' }}
+                                        >
+                                            <UploadCloud size={18} /> {uploading ? 'Uploading...' : 'Choose Photo'}
+                                        </label>
+                                        <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>JPG, PNG under 5MB</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button type="submit" disabled={uploading} className="clay-button primary" style={{ height: '60px', marginTop: '1rem', fontSize: '1.1rem', opacity: uploading ? 0.7 : 1 }}>Register Stock</button>
                         </form>
                     </div>
                 </div>
@@ -285,6 +434,29 @@ const Inventory = () => {
                 </div>
             </div>
 
+            {/* Edit Stock Modal */}
+            {showEditModal && (
+                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(255,255,255,0.01)', backdropFilter: 'blur(12px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
+                    <div className="clay-card" style={{ maxWidth: '400px', width: '100%', padding: '2.5rem', borderRadius: '40px', background: 'white' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                            <h2 style={{ margin: 0 }}>Update: {showEditModal.name}</h2>
+                            <button className="clay-button" style={{ width: '40px', height: '40px', border: 'none', color: 'var(--danger)', padding: 0 }} onClick={() => setShowEditModal(null)}><X /></button>
+                        </div>
+                        <form onSubmit={handleUpdateStock} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Adjust Stock ({showEditModal.unit})</label>
+                                <input type="number" className="clay-input" required value={editData.stock} onChange={(e) => setEditData({ ...editData, stock: e.target.value })} />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Quality Health (%)</label>
+                                <input type="number" className="clay-input" min="0" max="100" value={editData.health} onChange={(e) => setEditData({ ...editData, health: e.target.value })} />
+                            </div>
+                            <button className="clay-button primary" style={{ marginTop: '1rem' }}>Save Changes</button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             <div className="clay-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem' }}>
                     <div style={{ position: 'relative', width: '350px' }}>
@@ -317,7 +489,16 @@ const Inventory = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredProducts.length === 0 ? (
+                            {loading ? (
+                                <tr>
+                                    <td colSpan="5" style={{ textAlign: 'center', padding: '5rem', color: 'var(--text-muted)' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                                            <div className="loading-spinner" style={{ width: '40px', height: '40px', border: '4px solid var(--warm-bg)', borderTop: '4px solid var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                                            <p>Fetching real-time inventory from database...</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : filteredProducts.length === 0 ? (
                                 <tr>
                                     <td colSpan="5" style={{ textAlign: 'center', padding: '5rem', color: 'var(--text-muted)' }}>
                                         <Package style={{ width: '48px', height: '48px', margin: '0 auto 1rem', opacity: 0.2 }} />
@@ -329,9 +510,10 @@ const Inventory = () => {
                                     <tr key={p.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.3)', position: 'relative' }}>
                                         <td style={{ padding: '1.5rem 1rem' }}>
                                             <div style={{ fontWeight: 600 }}>{p.name}</div>
-                                            <div style={{ fontSize: '0.8rem', opacity: 0.6, display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                                SKU: {p.sku}
-                                                {p.isSoldInShop && <span style={{ background: '#dcfce7', color: '#166534', padding: '1px 6px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 800 }}>IN SHOP</span>}
+                                            <div style={{ fontSize: '0.8rem', opacity: 0.6, display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                <span>SKU: {p.sku}</span>
+                                                {p.beypariName && <span style={{ background: '#f8fafc', color: '#334155', padding: '3px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 700 }}>Beypari: {p.beypariName}</span>}
+                                                {p.isSoldInShop && <span style={{ background: '#dcfce7', color: '#166534', padding: '3px 8px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 800 }}>IN SHOP</span>}
                                             </div>
                                         </td>
                                         <td style={{ padding: '1.5rem 1rem' }}><span className="clay-chip">{p.category}</span></td>

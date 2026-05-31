@@ -1,166 +1,174 @@
-import React, { useState } from 'react';
-import { Search, Plus, Filter, Download, MoreVertical, UploadCloud, Printer, X, FileText, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import api from '../api/axios';
+import { Plus, Printer, X } from 'lucide-react';
 
 const Copybooks = () => {
-    const [activePartner, setActivePartner] = useState("");
-    const [showUploadModal, setShowUploadModal] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(0);
-    const [isUploading, setIsUploading] = useState(false);
+    const [staffList, setStaffList] = useState([]);
+    const [entries, setEntries] = useState([]);
+    const [activeStaffCode, setActiveStaffCode] = useState('');
+    const [showModal, setShowModal] = useState(false);
+    const [form, setForm] = useState({
+        customerName: '',
+        description: '',
+        debit: '',
+        credit: '',
+    });
+    const [error, setError] = useState('');
 
-    const [partnerEntries, setPartnerEntries] = useState([]);
+    const fetchData = async () => {
+        try {
+            let staffRes;
+            try {
+                staffRes = await api.get('/data/staff-copybooks');
+            } catch {
+                staffRes = await api.post('/data/staff-copybooks');
+            }
+            const staff = staffRes.data || [];
+            setStaffList(staff);
+            if (!activeStaffCode && staff[0]) setActiveStaffCode(staff[0].staffCode);
+
+            const code = activeStaffCode || staff[0]?.staffCode;
+            if (code) {
+                const { data } = await api.get(`/data/staff-copybooks/entries?staffCode=${code}`);
+                setEntries(data || []);
+            }
+        } catch (err) {
+            console.error(err);
+            setError('Failed to load copybooks');
+        }
+    };
 
     useEffect(() => {
-        import('../api/axios').then(({ default: api }) => {
-            api.get('/data/partner-copybook')
-                .then(({ data }) => setPartnerEntries(data))
-                .catch(err => console.error("Copybook fetch fail:", err));
-        });
-    }, []);
+        fetchData();
+    }, [activeStaffCode]);
 
-    // Group entries by partner name for the UI
-    const partnerData = partnerEntries.reduce((acc, entry) => {
-        if (!acc[entry.partner]) acc[entry.partner] = [];
-        acc[entry.partner].push({
-            ...entry,
-            id: entry._id,
-            debit: entry.debit ? `₨ ${entry.debit.toLocaleString()}` : "0",
-            credit: entry.credit ? `₨ ${entry.credit.toLocaleString()}` : "0",
-            balance: `₨ ${entry.balance.toLocaleString()}`
-        });
-        return acc;
-    }, {});
+    const activeStaff = staffList.find((s) => s.staffCode === activeStaffCode);
+    const latestBalance = entries.length ? entries[0].balanceAfter : 0;
 
-    const handleUpload = () => {
-        setIsUploading(true);
-        let progress = 0;
-        const interval = setInterval(() => {
-            progress += 10;
-            setUploadProgress(progress);
-            if (progress >= 100) {
-                clearInterval(interval);
-                setTimeout(() => {
-                    setIsUploading(false);
-                    setShowUploadModal(false);
-                    setUploadProgress(0);
-                    alert("Physical page digitized and added to register successfully!");
-                }, 500);
-            }
-        }, 200);
+    const handleManualEntry = async (e) => {
+        e.preventDefault();
+        if (!activeStaff) return;
+        try {
+            await api.post('/data/staff-copybooks/entries', {
+                copybookId: activeStaff._id,
+                type: 'manual',
+                customerName: form.customerName,
+                description: form.description,
+                debit: parseFloat(form.debit) || 0,
+                credit: parseFloat(form.credit) || 0,
+            });
+            setShowModal(false);
+            setForm({ customerName: '', description: '', debit: '', credit: '' });
+            fetchData();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to add entry');
+        }
     };
 
     const handlePrint = () => {
-        const printContent = document.getElementById('printable-register');
-        if (!printContent) return;
-        const originalContent = document.body.innerHTML;
-        document.body.innerHTML = printContent.innerHTML;
         window.print();
-        document.body.innerHTML = originalContent;
-        window.location.reload(); 
     };
-
-    const totalBalance = activePartner && partnerData[activePartner] ? partnerData[activePartner][0]?.balance || "0" : "0";
 
     return (
         <div className="page-content">
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', flexWrap: 'wrap', gap: '1rem' }}>
                 <div>
-                    <h1 style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Partner Copybook</h1>
-                    <p style={{ color: 'var(--text-muted)' }}>Digital register for partner investments and profit sharing.</p>
+                    <h1 style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>Staff Copybooks</h1>
+                    <p style={{ color: 'var(--text-muted)' }}>Registers A–E for customer udhaar and payments</p>
                 </div>
-                <button className="clay-button primary" onClick={() => setShowUploadModal(true)}><UploadCloud /> Upload Physical Page</button>
+                <button type="button" className="clay-button primary" onClick={() => setShowModal(true)} disabled={!activeStaff}>
+                    <Plus size={18} /> Manual Entry
+                </button>
             </header>
 
-            <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
-                {Object.keys(partnerData).length === 0 ? (
-                    <div style={{ padding: '0.5rem 1rem', background: 'var(--warm-bg)', borderRadius: '12px', color: 'var(--text-muted)' }}>No partners registered.</div>
-                ) : (
-                    Object.keys(partnerData).map(partner => (
-                        <button 
-                            key={partner}
-                            className={`clay-button ${activePartner === partner ? 'active' : ''}`} 
-                            style={activePartner === partner ? { background: 'var(--primary)', color: 'white' } : {}}
-                            onClick={() => setActivePartner(partner)}
-                        >
-                            Partner: {partner}
-                        </button>
-                    ))
-                )}
-            </div>
-
-            {/* Digitization Modal */}
-            {showUploadModal && (
-                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(255,255,255,0.01)', backdropFilter: 'blur(15px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
-                    <div className="clay-card" style={{ maxWidth: '500px', width: '100%', padding: '3rem', borderRadius: '40px', background: 'white', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                            <h2 style={{ margin: 0 }}>Digitize Register Page</h2>
-                            <button className="clay-button" style={{ width: '40px', height: '40px', color: 'var(--danger)', padding: 0 }} onClick={() => setShowUploadModal(false)}><X /></button>
-                        </div>
-                        
-                        {!isUploading ? (
-                            <div style={{ padding: '2rem', border: '3px dashed var(--warm-bg)', borderRadius: '32px', marginBottom: '2rem' }}>
-                                <UploadCloud size={64} style={{ color: 'var(--primary)', marginBottom: '1.5rem', opacity: 0.5 }} />
-                                <p style={{ fontWeight: 600 }}>Drop high-resolution scan or image here</p>
-                                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Supported: JPG, PNG, PDF (Max 10MB)</p>
-                                <button className="clay-button primary" style={{ marginTop: '2rem', width: '100%' }} onClick={handleUpload}>Start OCR Scanning</button>
-                            </div>
-                        ) : (
-                            <div style={{ padding: '2rem' }}>
-                                <div style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '1rem' }}>Extracting Data...</div>
-                                <div style={{ width: '100%', height: '15px', background: 'var(--warm-bg)', borderRadius: '10px', overflow: 'hidden', boxShadow: 'var(--clay-shadow-in)', marginBottom: '1.5rem' }}>
-                                    <div style={{ width: `${uploadProgress}%`, height: '100%', background: 'linear-gradient(90deg, var(--primary), var(--accent))', transition: 'width 0.3s ease' }}></div>
-                                </div>
-                                <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Our AI is digitizing handwriting and validating ledger entries...</p>
-                            </div>
-                        )}
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}><CheckCircle2 size={14} color="var(--success)" /> SECURE AES-256 ENCRYPTED STORAGE</p>
-                    </div>
+            {error && (
+                <div className="clay-card" style={{ marginBottom: '1rem', padding: '1rem', color: 'var(--danger)' }}>
+                    {error}
                 </div>
             )}
 
+            <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+                {staffList.map((s) => (
+                    <button
+                        key={s._id}
+                        type="button"
+                        className={`clay-button ${activeStaffCode === s.staffCode ? 'primary' : ''}`}
+                        onClick={() => setActiveStaffCode(s.staffCode)}
+                    >
+                        {s.staffName}
+                    </button>
+                ))}
+            </div>
+
             <div className="clay-card" id="printable-register">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
                     <div>
-                        <h3 style={{ fontSize: '1.8rem', marginBottom: '0.4rem' }}>Running Balance</h3>
-                        <div style={{ fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                            <span style={{ color: 'var(--success)', fontWeight: 800, padding: '0.5rem 1rem', background: '#dcfce7', borderRadius: '12px' }}>PKR {totalBalance} (Cr)</span>
-                            <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Last updated: Today</span>
-                        </div>
+                        <h3 style={{ margin: 0 }}>{activeStaff?.staffName || '—'} — Running balance</h3>
+                        <p style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary-dark)', margin: '0.5rem 0 0' }}>
+                            PKR {Number(latestBalance).toLocaleString()}
+                        </p>
                     </div>
-                    <button className="clay-button" onClick={handlePrint}><Printer /> Print Register</button>
+                    <button type="button" className="clay-button" onClick={handlePrint}>
+                        <Printer size={18} /> Print
+                    </button>
                 </div>
 
-                <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                        <thead>
-                            <tr style={{ borderBottom: '2px solid rgba(255,255,255,0.5)' }}>
-                                <th style={{ padding: '1.2rem 1rem', color: 'var(--text-muted)' }}>Date</th>
-                                <th style={{ padding: '1.2rem 1rem', color: 'var(--text-muted)' }}>Description</th>
-                                <th style={{ padding: '1.2rem 1rem', color: 'var(--text-muted)' }}>Debit (Dr)</th>
-                                <th style={{ padding: '1.2rem 1rem', color: 'var(--text-muted)' }}>Credit (Cr)</th>
-                                <th style={{ padding: '1.2rem 1rem', color: 'var(--text-muted)' }}>Balance</th>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                        <tr style={{ borderBottom: '2px solid #eee', textAlign: 'left' }}>
+                            <th style={{ padding: '1rem' }}>Date</th>
+                            <th>Customer</th>
+                            <th>Description</th>
+                            <th>Debit</th>
+                            <th>Credit</th>
+                            <th>Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {entries.map((e) => (
+                            <tr key={e._id} style={{ borderBottom: '1px solid #f5f5f5' }}>
+                                <td style={{ padding: '1rem' }}>
+                                    {new Date(e.entryDate).toLocaleDateString('en-GB')}
+                                </td>
+                                <td>{e.customerName || e.customer?.name || '—'}</td>
+                                <td>{e.description}</td>
+                                <td>{e.debit ? `PKR ${Number(e.debit).toLocaleString()}` : '—'}</td>
+                                <td>{e.credit ? `PKR ${Number(e.credit).toLocaleString()}` : '—'}</td>
+                                <td style={{ fontWeight: 700 }}>PKR {Number(e.balanceAfter).toLocaleString()}</td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            {activePartner && partnerData[activePartner] ? partnerData[activePartner].map((r) => (
-                                <tr key={r.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.3)' }}>
-                                    <td style={{ padding: '1.5rem 1rem' }}>{r.date}</td>
-                                    <td style={{ padding: '1.5rem 1rem', fontWeight: 500 }}>{r.desc}</td>
-                                    <td style={{ padding: '1.5rem 1rem', color: r.debitColor ? `var(--${r.debitColor})` : 'inherit', fontWeight: 'bold' }}>{r.debit}</td>
-                                    <td style={{ padding: '1.5rem 1rem', color: r.creditColor ? `var(--${r.creditColor})` : 'inherit', fontWeight: 'bold' }}>{r.credit}</td>
-                                    <td style={{ padding: '1.5rem 1rem', fontWeight: 800 }}>{r.balance}</td>
-                                </tr>
-                            )) : (
-                                <tr>
-                                    <td colSpan="5" style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-muted)' }}>Select a partner or upload a page to see entries.</td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                        ))}
+                        {!entries.length && (
+                            <tr>
+                                <td colSpan={6} style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                    No entries yet. Sales with udhaar appear here automatically.
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
             </div>
+
+            {showModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.15)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+                    <div className="clay-card" style={{ maxWidth: '440px', width: '100%', padding: '2rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                            <h2 style={{ margin: 0 }}>Manual entry — {activeStaff?.staffName}</h2>
+                            <button type="button" className="clay-button" onClick={() => setShowModal(false)}>
+                                <X />
+                            </button>
+                        </div>
+                        <form onSubmit={handleManualEntry} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <input className="clay-input" placeholder="Customer name" value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })} />
+                            <input className="clay-input" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} required />
+                            <input className="clay-input" type="number" placeholder="Debit (udhaar added)" min="0" value={form.debit} onChange={(e) => setForm({ ...form, debit: e.target.value })} />
+                            <input className="clay-input" type="number" placeholder="Credit (payment received)" min="0" value={form.credit} onChange={(e) => setForm({ ...form, credit: e.target.value })} />
+                            <button type="submit" className="clay-button primary">Save entry</button>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
 export default Copybooks;
-

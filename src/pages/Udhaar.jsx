@@ -11,13 +11,15 @@ const Udhaar = () => {
             .then(({ data }) => { 
                 if (data && data.length > 0) {
                     setUdhaarItems(data.filter(c => (c.udhaarRaw || 0) > 0).map(c => {
-                        const days = Math.floor(Math.random() * 90); // Dummy aging for now as we don't have created date in model
+                        const ref = c.lastPaymentAt || c.updatedAt || c.createdAt;
+                        const days = ref ? Math.floor((Date.now() - new Date(ref).getTime()) / (1000 * 60 * 60 * 24)) : 0;
                         return {
-                            id: c.customerId || c._id,
+                            id: c._id,
                             customer: c.name || 'Unknown',
-                            date: c.createdAt ? new Date(c.createdAt).toLocaleDateString() : 'N/A',
+                            date: c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-GB') : 'N/A',
                             dueRaw: c.udhaarRaw || 0,
                             due: c.udhaar || `PKR ${(c.udhaarRaw || 0).toLocaleString()}`,
+                            assignedCopybook: c.assignedCopybook || '',
                             aging: days,
                             agingText: `${days} Days`,
                             agingColor: days > 60 ? 'danger' : days > 30 ? 'accent' : 'success'
@@ -31,6 +33,7 @@ const Udhaar = () => {
     const [filterType, setFilterType] = useState('All Customers');
     const [showPaymentModal, setShowPaymentModal] = useState(null);
     const [paymentAmount, setPaymentAmount] = useState('');
+    const [copybookStaff, setCopybookStaff] = useState('STAFF-A');
 
     const handleExport = () => {
         const headers = ["Customer", "Invoice Date", "Total Due", "Aging (Days)"];
@@ -50,31 +53,35 @@ const Udhaar = () => {
         document.body.removeChild(link);
     };
 
-    const handleRecordPayment = (e) => {
+    const handleRecordPayment = async (e) => {
         e.preventDefault();
         if (!showPaymentModal) return;
-        const amount = parseInt(paymentAmount) || 0;
-        
-        // Update UI instantly
-        setUdhaarItems(prev => prev.map(item => {
-            if (item.id === showPaymentModal.id) {
-                const newDueRaw = Math.max(0, item.dueRaw - amount);
-                return {
-                    ...item,
-                    dueRaw: newDueRaw,
-                    due: `PKR ${newDueRaw.toLocaleString()}`
-                };
-            }
-            return item;
-        }).filter(item => item.dueRaw > 0)); // Remove items if fully paid
-        
+        const amount = parseInt(paymentAmount, 10) || 0;
+        const prev = udhaarItems;
+        setUdhaarItems((p) =>
+            p
+                .map((item) => {
+                    if (item.id === showPaymentModal.id) {
+                        const newDueRaw = Math.max(0, item.dueRaw - amount);
+                        return { ...item, dueRaw: newDueRaw, due: `PKR ${newDueRaw.toLocaleString()}` };
+                    }
+                    return item;
+                })
+                .filter((item) => item.dueRaw > 0)
+        );
         setShowPaymentModal(null);
         setPaymentAmount('');
-        alert(`Payment of PKR ${amount.toLocaleString()} recorded for ${showPaymentModal.customer}`);
-        
-        // Save to DB silently via customer endpoint
-        const updateData = { udhaarRaw: Math.max(0, showPaymentModal.dueRaw - amount) };
-        api.put(`/data/customers/${showPaymentModal.id}/payment`, updateData).catch((err) => console.error("Udhaar payment fail:", err));
+        try {
+            await api.post(`/data/customers/${showPaymentModal.id}/payments`, {
+                amount,
+                copybookStaff,
+                method: 'cash',
+            });
+        } catch (err) {
+            setUdhaarItems(prev);
+            console.error('Udhaar payment fail:', err);
+            alert('Failed to record payment. Please try again.');
+        }
     };
 
     const filteredItems = udhaarItems.filter(item => {
@@ -151,6 +158,14 @@ const Udhaar = () => {
                                     <Calendar style={{ position: 'absolute', left: '1.2rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', width: '20px' }} />
                                     <input type="text" className="clay-input" value={`Settle: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`} readOnly style={{ paddingLeft: '3.5rem', opacity: 0.6 }} />
                                 </div>
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.7rem', fontWeight: 700 }}>Staff copybook</label>
+                                <select className="clay-input" value={copybookStaff} onChange={(e) => setCopybookStaff(e.target.value)}>
+                                    {['STAFF-A', 'STAFF-B', 'STAFF-C', 'STAFF-D', 'STAFF-E'].map((c) => (
+                                        <option key={c} value={c}>{c}</option>
+                                    ))}
+                                </select>
                             </div>
                             <button type="submit" className="clay-button primary" style={{ width: '100%', height: '70px', marginTop: '1rem', fontSize: '1.3rem', background: 'var(--success)', borderRadius: '24px' }}>Confirm Recovery</button>
                         </form>

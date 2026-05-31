@@ -141,7 +141,7 @@ const StoreHome = ({ authData, cartItems, addToCart, favorites, toggleFavorite }
                                     <div style={{ color: 'var(--success)' }}><CheckCircle2 size={20} /></div>
                                     <div>
                                         <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Order Dispatched</div>
-                                        <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>Your batch of Kinnows is on the way.</div>
+                                        <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>Your order is being prepared and will ship soon.</div>
                                     </div>
                                 </div>
                             </div>
@@ -169,7 +169,7 @@ const StoreHome = ({ authData, cartItems, addToCart, favorites, toggleFavorite }
                     <div className="clay-card modal-scale-up" style={{ maxWidth: '1050px', width: '100%', padding: 0, borderRadius: '60px', background: 'white', overflow: 'hidden', display: 'flex', boxShadow: '0 50px 100px rgba(0,0,0,0.12)', border: 'none', height: 'auto', maxHeight: '85vh', transform: 'scale(1)', animation: 'scaleUp 0.3s ease-out' }}>
                         <div style={{ flex: '1.2', position: 'relative', overflow: 'hidden' }}>
                             <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', background: 'linear-gradient(135deg,#f0fff4,#fff5e4)' }}>
-                                <FruitIcon name={showProduct.name} category={showProduct.category} size={220} variant="modal" />
+                                <img src={showProduct.img} alt={showProduct.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '24px' }} />
                             </div>
                             <button className="clay-button" style={{ position: 'absolute', top: '1.5rem', left: '1.5rem', width: '56px', height: '56px', padding: 0, background: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', boxShadow: clayShadowPuffy, cursor: 'pointer', zIndex: 100 }} onClick={() => setShowProduct(null)}>
                                 <X size={28} strokeWidth={2.5} color="#2D3436" />
@@ -183,6 +183,9 @@ const StoreHome = ({ authData, cartItems, addToCart, favorites, toggleFavorite }
                             <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.8rem', marginBottom: '2.5rem' }}>
                                 <div style={{ fontSize: '2.4rem', fontWeight: 800, color: 'var(--primary-dark)' }}>₨ {showProduct.price}</div>
                                 <span style={{ color: 'var(--text-muted)', fontSize: '1.15rem' }}>/ per crate batch</span>
+                                <span style={{ marginLeft: 'auto', background: showProduct.stock > 0 ? '#E8F5E9' : '#FFEBEE', color: showProduct.stock > 0 ? '#2E7D32' : '#C62828', padding: '0.4rem 0.8rem', borderRadius: '12px', fontWeight: 700 }}>
+                                    {showProduct.stock > 0 ? `${showProduct.stock} Available` : 'Out of Stock'}
+                                </span>
                             </div>
                             <div style={{ display: 'flex', gap: '2.5rem', marginBottom: '3rem' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}><MapPin size={24} color="var(--primary)" /> <b style={{ fontSize: '1.1rem' }}>{showProduct.origin}</b></div>
@@ -209,8 +212,8 @@ const StoreHome = ({ authData, cartItems, addToCart, favorites, toggleFavorite }
             <div className="store-hero" style={{ position: 'relative', marginBottom: '3.5rem', zIndex: 10 }}>
                 <div style={{ position: 'relative', zIndex: 2, background: 'rgba(255, 255, 255, 0.88)', backdropFilter: 'blur(15px)', borderRadius: '40px', padding: '48px', boxShadow: '0 15px 50px rgba(0,0,0,0.06)', maxWidth: '580px' }}>
                     <div className="badge-clay" style={{ background: 'var(--warm-bg)', color: 'var(--primary)', marginBottom: '1.5rem' }}><Sparkles style={{ width: '14px' }} /> Seasonal Special</div>
-                    <h2 style={{ fontSize: '3.2rem', marginBottom: '1.5rem', lineHeight: '1.2' }}>Fresh Kinnow Season <span style={{ color: 'var(--soft-orange)' }}>is Here!</span> 🍊</h2>
-                    <p style={{ fontSize: '1.25rem', opacity: 0.9, marginBottom: '3rem' }}>Direct from Sargodha's finest orchards. Export quality and local mandi rates guaranteed.</p>
+                    <h2 style={{ fontSize: '3.2rem', marginBottom: '1.5rem', lineHeight: '1.2' }}>Seasonal Harvest Collection <span style={{ color: 'var(--soft-orange)' }}>Is Live</span></h2>
+                    <p style={{ fontSize: '1.25rem', opacity: 0.9, marginBottom: '3rem' }}>Shop premium mandi produce from verified growers and enjoy the best available prices today.</p>
                     <button className="clay-button primary" style={{ background: 'var(--primary-dark)', padding: '1.2rem 3.5rem' }} onClick={() => navigate('/store/products')}>Shop Now <ChevronRight /></button>
                 </div>
                 <div className="floating-clay" style={{ position: 'absolute', right: '5%', top: '5%', fontSize: '9rem' }}>🍊</div>
@@ -258,11 +261,11 @@ const StoreHome = ({ authData, cartItems, addToCart, favorites, toggleFavorite }
                                             <Star size={18} color={isFavorite(p.id) ? "#f57c00" : "#2D3436"} fill={isFavorite(p.id) ? "#f57c00" : "none"} />
                                         </button>
                                         <span className="stock-badge in-stock">Export Grade</span>
-                                        <FruitIcon name={p.name} category={p.category} size="fill" />
+                                        <img src={p.img} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
                                     </div>
                                     <div className="product-info" style={{ marginTop: '1.5rem' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                                            <div><h4 style={{ margin: 0, fontSize: '1.4rem' }}>{p.name}</h4><div style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>{p.farm}</div></div>
+                                            <div><h4 style={{ margin: 0, fontSize: '1.4rem' }}>{p.name}</h4><div style={{ fontSize: '0.85rem', color: p.stock > 0 ? 'var(--success)' : 'var(--danger)', marginTop: '0.2rem', fontWeight: 600 }}>{p.stock > 0 ? `${p.stock} crates available` : 'Out of Stock'}</div></div>
                                             <div style={{ fontWeight: 800, fontSize: '1.4rem', color: 'var(--primary-dark)' }}>₨ {p.price}</div>
                                         </div>
                                         <div style={{ display: 'flex', gap: '0.8rem' }}>

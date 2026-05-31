@@ -1,4 +1,5 @@
 import Order from '../models/Order.js';
+import Inventory from '../models/Inventory.js';
 
 // @desc    Create new order
 // @route   POST /api/data/orders
@@ -28,6 +29,20 @@ export const addOrderItems = async (req, res) => {
         });
 
         const createdOrder = await order.save();
+
+        for (const item of orderItems) {
+            const product = await Inventory.findById(item.product);
+            if (product) {
+                product.stock = product.stock - item.quantity;
+                if (product.stock <= 0) {
+                    product.stock = 0;
+                    product.status = 'Out of Stock';
+                } else if (product.stock < 10) {
+                    product.status = 'Low Stock';
+                }
+                await product.save();
+            }
+        }
 
         res.status(201).json(createdOrder);
     }

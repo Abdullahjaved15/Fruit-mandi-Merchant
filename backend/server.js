@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 
 import authRoutes from './routes/authRoutes.js';
 import apiRoutes from './routes/apiRoutes.js';
+import upload from './middlewares/uploadMiddleware.js';
 
 // Load env vars
 const __filename = fileURLToPath(import.meta.url);
@@ -28,10 +29,30 @@ app.use(cors());
 app.use('/api/auth', authRoutes);
 app.use('/api/data', apiRoutes);
 
+app.post('/api/upload', upload.single('image'), (req, res) => {
+    res.send({
+        message: 'Image uploaded successfully',
+        image: req.file.path
+    });
+});
+
+const uploadsPath = path.join(__dirname, 'uploads');
+app.use('/uploads', express.static(uploadsPath));
+
 app.get('/', (req, res) => {
     res.send('API is running...');
 });
 
 const PORT = process.env.PORT || 5000;
 
+// Global error handler
+app.use((err, req, res, next) => {
+    console.error("Express Global Error:", err);
+    res.status(500).json({
+        message: err.message,
+        stack: process.env.NODE_ENV === 'production' ? null : err.stack,
+    });
+});
+
 app.listen(PORT, console.log(`Server running on port ${PORT}`));
+
